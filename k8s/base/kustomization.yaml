@@ -1,0 +1,5 @@
+resources:
+  - backend-a-deployment.yaml
+  - backend-b-deployment.yaml
+  - services.yaml
+  - configmap.yaml
