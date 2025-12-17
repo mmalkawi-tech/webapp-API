@@ -1,0 +1,132 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - api/**
+      - k8s/**
+      - pipelines/api.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  ACR_NAME: acrmoathdev            # 👈 update if different
+  IMAGE_TAG: $(Build.BuildId)
+  K8S_NAMESPACE: webapp
+
+# ===========================
+# BUILD & PUSH
+# ===========================
+stages:
+- stage: Build
+  displayName: Build & Push Images
+  jobs:
+  - job: Build
+    steps:
+    - checkout: self
+
+    - task: AzureCLI@2
+      displayName: Build and Push Images
+      inputs:
+        azureSubscription: moath-sp-new
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          az acr login --name $(ACR_NAME)
+
+          docker build -t $(ACR_NAME).azurecr.io/backend-a:$(IMAGE_TAG) api/backend-a
+          docker build -t $(ACR_NAME).azurecr.io/backend-b:$(IMAGE_TAG) api/backend-b
+
+          docker push $(ACR_NAME).azurecr.io/backend-a:$(IMAGE_TAG)
+          docker push $(ACR_NAME).azurecr.io/backend-b:$(IMAGE_TAG)
+
+# ===========================
+# DEV DEPLOY
+# ===========================
+- stage: Dev
+  displayName: Deploy DEV
+  dependsOn: Build
+  jobs:
+  - deployment: DeployDev
+    environment: api-dev
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            displayName: Deploy to AKS DEV
+            inputs:
+              azureSubscription: moath-sp-new
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az aks get-credentials \
+                  --resource-group rg-moath-dev \
+                  --name aks-moath-dev \
+                  --overwrite-existing
+
+                kubectl create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
+
+                kubectl apply -k k8s/overlays/dev
+
+# ===========================
+# QA DEPLOY (APPROVAL)
+# ===========================
+- stage: QA
+  displayName: Deploy QA
+  dependsOn: Dev
+  jobs:
+  - deployment: DeployQA
+    environment: api-qa
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            displayName: Deploy to AKS QA
+            inputs:
+              azureSubscription: moath-sp-new
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az aks get-credentials \
+                  --resource-group rg-moath-qa \
+                  --name aks-moath-qa \
+                  --overwrite-existing
+
+                kubectl apply -k k8s/overlays/qa
+
+# ===========================
+# PROD DEPLOY (APPROVAL)
+# ===========================
+- stage: Prod
+  displayName: Deploy PROD
+  dependsOn: QA
+  jobs:
+  - deployment: DeployProd
+    environment: api-prod
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            displayName: Deploy to AKS PROD
+            inputs:
+              azureSubscription: moath-sp-new
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az aks get-credentials \
+                  --resource-group rg-moath-prod \
+                  --name aks-moath-prod \
+                  --overwrite-existing
+
+                kubectl apply -k k8s/overlays/prod
