@@ -1,2 +1,10 @@
 resources:
   - ../../base
+
+images:
+  - name: backend-a
+    newName: acrmoath.azurecr.io/backend-a
+    newTag: latest
+  - name: backend-b
+    newName: acrmoath.azurecr.io/backend-b
+    newTag: latest

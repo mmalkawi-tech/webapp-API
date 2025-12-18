@@ -4,7 +4,8 @@ trigger:
       - main
   paths:
     include:
-      - api/**
+      - backend-a/**
+      - backend-b/**
       - k8s/**
       - pipelines/api.yml
 
@@ -12,45 +13,75 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
-  ACR_NAME: acrmoathdev            # 👈 update if different
-  IMAGE_TAG: $(Build.BuildId)
-  K8S_NAMESPACE: webapp
+  # Azure
+  AZURE_SERVICE_CONNECTION: "moath-sp-new"
+  LOCATION: "westus2"
 
-# ===========================
-# BUILD & PUSH
-# ===========================
+  # ACR (shared)
+  ACR_NAME: "acrmoath"
+  ACR_LOGIN_SERVER: "acrmoath.azurecr.io"
+
+  # AKS naming (your infra)
+  AKS_NAME_DEV: "aks-moath-dev"
+  AKS_RG_DEV: "rg-moath-dev"
+
+  AKS_NAME_QA: "aks-moath-qa"
+  AKS_RG_QA: "rg-moath-qa"
+
+  AKS_NAME_PROD: "aks-moath-prod"
+  AKS_RG_PROD: "rg-moath-prod"
+
+  # Kubernetes
+  NAMESPACE: "moath-webapp"
+
 stages:
+# =========================
+# BUILD & PUSH (ONCE)
+# =========================
 - stage: Build
-  displayName: Build & Push Images
+  displayName: "Build & Push Images to ACR"
   jobs:
-  - job: Build
+  - job: BuildPush
+    displayName: "Build backend-a & backend-b"
     steps:
     - checkout: self
 
     - task: AzureCLI@2
-      displayName: Build and Push Images
+      displayName: "ACR Login"
       inputs:
-        azureSubscription: moath-sp-new
+        azureSubscription: $(AZURE_SERVICE_CONNECTION)
         scriptType: bash
         scriptLocation: inlineScript
         inlineScript: |
+          set -e
           az acr login --name $(ACR_NAME)
 
-          docker build -t $(ACR_NAME).azurecr.io/backend-a:$(IMAGE_TAG) api/backend-a
-          docker build -t $(ACR_NAME).azurecr.io/backend-b:$(IMAGE_TAG) api/backend-b
+    - script: |
+        set -e
+        echo "Building backend-a..."
+        docker build -t $(ACR_LOGIN_SERVER)/backend-a:$(Build.BuildId) -t $(ACR_LOGIN_SERVER)/backend-a:latest ./backend-a
+        echo "Building backend-b..."
+        docker build -t $(ACR_LOGIN_SERVER)/backend-b:$(Build.BuildId) -t $(ACR_LOGIN_SERVER)/backend-b:latest ./backend-b
 
-          docker push $(ACR_NAME).azurecr.io/backend-a:$(IMAGE_TAG)
-          docker push $(ACR_NAME).azurecr.io/backend-b:$(IMAGE_TAG)
+        echo "Pushing backend-a..."
+        docker push $(ACR_LOGIN_SERVER)/backend-a:$(Build.BuildId)
+        docker push $(ACR_LOGIN_SERVER)/backend-a:latest
 
-# ===========================
+        echo "Pushing backend-b..."
+        docker push $(ACR_LOGIN_SERVER)/backend-b:$(Build.BuildId)
+        docker push $(ACR_LOGIN_SERVER)/backend-b:latest
+      displayName: "Docker Build & Push"
+
+# =========================
 # DEV DEPLOY
-# ===========================
+# =========================
 - stage: Dev
-  displayName: Deploy DEV
+  displayName: "Deploy DEV"
   dependsOn: Build
   jobs:
   - deployment: DeployDev
-    environment: api-dev
+    displayName: "Deploy to AKS DEV"
+    environment: dev
     strategy:
       runOnce:
         deploy:
@@ -58,30 +89,33 @@ stages:
           - checkout: self
 
           - task: AzureCLI@2
-            displayName: Deploy to AKS DEV
+            displayName: "Deploy Kustomize overlay (DEV)"
             inputs:
-              azureSubscription: moath-sp-new
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                az aks get-credentials \
-                  --resource-group rg-moath-dev \
-                  --name aks-moath-dev \
-                  --overwrite-existing
+                set -e
 
-                kubectl create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
+                az aks get-credentials -g $(AKS_RG_DEV) -n $(AKS_NAME_DEV) --overwrite-existing
 
-                kubectl apply -k k8s/overlays/dev
+                kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 
-# ===========================
-# QA DEPLOY (APPROVAL)
-# ===========================
+                kubectl apply -n $(NAMESPACE) -k k8s/overlays/dev
+
+                kubectl get pods -n $(NAMESPACE)
+                kubectl get svc -n $(NAMESPACE)
+
+# =========================
+# QA DEPLOY
+# =========================
 - stage: QA
-  displayName: Deploy QA
+  displayName: "Deploy QA"
   dependsOn: Dev
   jobs:
   - deployment: DeployQA
-    environment: api-qa
+    displayName: "Deploy to AKS QA"
+    environment: qa
     strategy:
       runOnce:
         deploy:
@@ -89,28 +123,33 @@ stages:
           - checkout: self
 
           - task: AzureCLI@2
-            displayName: Deploy to AKS QA
+            displayName: "Deploy Kustomize overlay (QA)"
             inputs:
-              azureSubscription: moath-sp-new
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                az aks get-credentials \
-                  --resource-group rg-moath-qa \
-                  --name aks-moath-qa \
-                  --overwrite-existing
+                set -e
 
-                kubectl apply -k k8s/overlays/qa
+                az aks get-credentials -g $(AKS_RG_QA) -n $(AKS_NAME_QA) --overwrite-existing
 
-# ===========================
-# PROD DEPLOY (APPROVAL)
-# ===========================
+                kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
+
+                kubectl apply -n $(NAMESPACE) -k k8s/overlays/qa
+
+                kubectl get pods -n $(NAMESPACE)
+                kubectl get svc -n $(NAMESPACE)
+
+# =========================
+# PROD DEPLOY
+# =========================
 - stage: Prod
-  displayName: Deploy PROD
+  displayName: "Deploy PROD"
   dependsOn: QA
   jobs:
   - deployment: DeployProd
-    environment: api-prod
+    displayName: "Deploy to AKS PROD"
+    environment: prod
     strategy:
       runOnce:
         deploy:
@@ -118,15 +157,19 @@ stages:
           - checkout: self
 
           - task: AzureCLI@2
-            displayName: Deploy to AKS PROD
+            displayName: "Deploy Kustomize overlay (PROD)"
             inputs:
-              azureSubscription: moath-sp-new
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                az aks get-credentials \
-                  --resource-group rg-moath-prod \
-                  --name aks-moath-prod \
-                  --overwrite-existing
+                set -e
 
-                kubectl apply -k k8s/overlays/prod
+                az aks get-credentials -g $(AKS_RG_PROD) -n $(AKS_NAME_PROD) --overwrite-existing
+
+                kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
+
+                kubectl apply -n $(NAMESPACE) -k k8s/overlays/prod
+
+                kubectl get pods -n $(NAMESPACE)
+                kubectl get svc -n $(NAMESPACE)
