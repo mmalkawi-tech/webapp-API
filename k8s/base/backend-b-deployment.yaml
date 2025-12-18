@@ -2,8 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend-b-moath
+  namespace: moath-webapp
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: backend-b-moath
@@ -13,12 +14,56 @@ spec:
         app: backend-b-moath
     spec:
       containers:
-      - name: backend-b-moath
-        image: backend-b
+      - name: backend-b
+        image: acrmoath.azurecr.io/backend-b:latest
         ports:
-        - containerPort: 8080
-        envFrom:
-        - configMapRef:
-            name: webapp-config-moath
-        - secretRef:
-            name: webapp-secrets-moath
+        - containerPort: 3000
+
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+
+        env:
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: db-config-moath
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: db-config-moath
+              key: DB_PORT
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: db-config-moath
+              key: DB_NAME
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: db-config-moath
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret-moath
+              key: POSTGRES_PASSWORD
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 20

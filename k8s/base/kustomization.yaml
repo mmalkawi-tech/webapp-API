@@ -1,6 +1,8 @@
 resources:
-  - backend-a-deployment.yaml
-  - backend-b-deployment.yaml
-  - services.yaml
-  - configmap.yaml
-  - secret.yaml
+- namespace.yaml
+- secret-postgres.yaml
+- configmap-db.yaml
+- backend-a-deployment.yaml
+- backend-a-service.yaml
+- backend-b-deployment.yaml
+- backend-b-service.yaml
