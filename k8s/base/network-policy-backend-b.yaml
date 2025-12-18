@@ -21,3 +21,21 @@ spec:
   - to:
     - ipBlock:
         cidr: 0.0.0.0/0
+
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-b-ingress-only-moath
+  namespace: moath-webapp
+spec:
+  podSelector:
+    matchLabels:
+      app: backend-b-moath
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx

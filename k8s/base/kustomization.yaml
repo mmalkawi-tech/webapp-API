@@ -10,3 +10,4 @@ resources:
 - network-policy-backend-b.yaml
 - backend-a-hpa.yaml
 - backend-b-hpa.yaml
+- ingress
