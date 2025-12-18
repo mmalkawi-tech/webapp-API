@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-a-moath
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend-a-moath
+  template:
+    metadata:
+      labels:
+        app: backend-a-moath
+    spec:
+      containers:
+      - name: backend-a-moath
+        image: backend-a
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: webapp-config-moath
+        - secretRef:
+            name: webapp-secrets-moath

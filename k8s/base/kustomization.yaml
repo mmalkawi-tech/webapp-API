@@ -3,3 +3,4 @@ resources:
   - backend-b-deployment.yaml
   - services.yaml
   - configmap.yaml
+  - secret.yaml

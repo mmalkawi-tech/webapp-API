@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webapp-config-moath
+data:
+  NODE_ENV: "production"
+  APP_OWNER: "moath"
