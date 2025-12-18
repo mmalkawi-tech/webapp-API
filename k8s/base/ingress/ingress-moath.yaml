@@ -3,12 +3,16 @@ kind: Ingress
 metadata:
   name: moath-webapp-ingress
   namespace: moath-webapp
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   ingressClassName: nginx
+
   tls:
   - hosts:
     - api.moath.local
     secretName: moath-tls-secret
+
   rules:
   - host: api.moath.local
     http:
@@ -20,6 +24,7 @@ spec:
             name: backend-a-moath
             port:
               number: 80
+
       - path: /backend-b
         pathType: Prefix
         backend:
