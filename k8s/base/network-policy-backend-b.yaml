@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-b-restrict-moath
+  namespace: moath-webapp
+spec:
+  podSelector:
+    matchLabels:
+      app: backend-b-moath
+  policyTypes:
+  - Ingress
+  - Egress
+
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: backend-a-moath
+
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0

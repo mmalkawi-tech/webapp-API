@@ -6,3 +6,7 @@ resources:
 - backend-a-service.yaml
 - backend-b-deployment.yaml
 - backend-b-service.yaml
+- network-policy-backend.yaml
+- network-policy-backend-b.yaml
+- backend-a-hpa.yaml
+- backend-b-hpa.yaml
