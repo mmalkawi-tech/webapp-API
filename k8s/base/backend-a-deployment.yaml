@@ -5,6 +5,7 @@ metadata:
   namespace: moath-webapp
 spec:
   replicas: 2
+  progressDeadlineSeconds: 600
   selector:
     matchLabels:
       app: backend-a-moath
@@ -16,10 +17,10 @@ spec:
       containers:
       - name: backend-a
         image: acrmoath.azurecr.io/backend-a:latest
-        ports:
-        - containerPort: 3000
 
-        # 🔒 Resource tuning (prevents OOMKill)
+        ports:
+        - containerPort: 8080   # ✅ FIX
+
         resources:
           requests:
             cpu: "200m"
@@ -28,7 +29,6 @@ spec:
             cpu: "750m"
             memory: "512Mi"
 
-        # 🔐 DB config (unchanged, correct)
         env:
         - name: DB_HOST
           valueFrom:
@@ -56,29 +56,26 @@ spec:
               name: postgres-secret-moath
               key: POSTGRES_PASSWORD
 
-        # 🟢 Give the app time to start
         startupProbe:
           httpGet:
             path: /health
-            port: 3000
+            port: 8080
           failureThreshold: 30
           periodSeconds: 10
 
-        # 🟢 Only mark ready when healthy
         readinessProbe:
           httpGet:
             path: /health
-            port: 3000
-          initialDelaySeconds: 5
+            port: 8080
+          initialDelaySeconds: 20
           periodSeconds: 10
           timeoutSeconds: 2
           failureThreshold: 5
 
-        # 🟢 Restart only if truly unhealthy
         livenessProbe:
           httpGet:
             path: /health
-            port: 3000
+            port: 8080
           initialDelaySeconds: 60
           periodSeconds: 20
           timeoutSeconds: 2

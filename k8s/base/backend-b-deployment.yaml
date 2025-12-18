@@ -5,6 +5,7 @@ metadata:
   namespace: moath-webapp
 spec:
   replicas: 2
+  progressDeadlineSeconds: 600
   selector:
     matchLabels:
       app: backend-b-moath
@@ -16,8 +17,9 @@ spec:
       containers:
       - name: backend-b
         image: acrmoath.azurecr.io/backend-b:latest
+
         ports:
-        - containerPort: 3000
+        - containerPort: 8080   # ✅ FIX
 
         resources:
           requests:
@@ -57,15 +59,15 @@ spec:
         startupProbe:
           httpGet:
             path: /health
-            port: 3000
+            port: 8080
           failureThreshold: 30
           periodSeconds: 10
 
         readinessProbe:
           httpGet:
             path: /health
-            port: 3000
-          initialDelaySeconds: 5
+            port: 8080
+          initialDelaySeconds: 20
           periodSeconds: 10
           timeoutSeconds: 2
           failureThreshold: 5
@@ -73,7 +75,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 3000
+            port: 8080
           initialDelaySeconds: 60
           periodSeconds: 20
           timeoutSeconds: 2
