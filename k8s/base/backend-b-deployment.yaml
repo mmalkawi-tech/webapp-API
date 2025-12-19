@@ -5,6 +5,14 @@ metadata:
 spec:
   replicas: 2
   progressDeadlineSeconds: 600
+
+  # 🔄 Rolling update strategy (controlled availability)
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+
   selector:
     matchLabels:
       app: backend-b-moath
@@ -54,30 +62,30 @@ spec:
               name: postgres-secret-moath
               key: POSTGRES_PASSWORD
 
-        # 🚀 Startup Probe — allow cold start & DB init
+        # 🚀 Startup Probe — extended cold-start tolerance
         startupProbe:
           httpGet:
             path: /healthz
             port: 8080
-          failureThreshold: 30
+          failureThreshold: 60
           periodSeconds: 10
 
-        # ✅ Readiness Probe — traffic eligibility
+        # ✅ Readiness Probe — safer traffic gating
         readinessProbe:
           httpGet:
             path: /readyz
             port: 8080
-          initialDelaySeconds: 10
+          initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 2
-          failureThreshold: 3
+          failureThreshold: 5
 
-        # 💓 Liveness Probe — restart if stuck
+        # 💓 Liveness Probe — restart if truly unhealthy
         livenessProbe:
           httpGet:
             path: /healthz
             port: 8080
-          initialDelaySeconds: 30
+          initialDelaySeconds: 60
           periodSeconds: 20
           timeoutSeconds: 2
-          failureThreshold: 3
+          failureThreshold: 5
