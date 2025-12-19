@@ -6,7 +6,6 @@ spec:
   replicas: 2
   progressDeadlineSeconds: 600
 
-  # 🔄 Rolling update strategy (same as backend-b)
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -23,7 +22,7 @@ spec:
     spec:
       containers:
       - name: backend-a
-        image: acrmoath.azurecr.io/backend-a
+        image: acrmoath.azurecr.io/backend-a-moath:latest
         ports:
         - containerPort: 8080
 
@@ -62,7 +61,7 @@ spec:
               name: postgres-secret-moath
               key: POSTGRES_PASSWORD
 
-        # 🚀 Startup Probe — extended cold-start tolerance
+        # 🚀 Startup Probe — extended cold start tolerance
         startupProbe:
           httpGet:
             path: /healthz
@@ -70,7 +69,7 @@ spec:
           failureThreshold: 60
           periodSeconds: 10
 
-        # ✅ Readiness Probe — safer traffic gating
+        # ✅ Readiness Probe — traffic eligibility
         readinessProbe:
           httpGet:
             path: /readyz
@@ -80,7 +79,7 @@ spec:
           timeoutSeconds: 2
           failureThreshold: 5
 
-        # 💓 Liveness Probe — restart only when truly unhealthy
+        # 💓 Liveness Probe — restart only if truly unhealthy
         livenessProbe:
           httpGet:
             path: /healthz
