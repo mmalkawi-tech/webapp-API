@@ -54,27 +54,30 @@ spec:
               name: postgres-secret-moath
               key: POSTGRES_PASSWORD
 
+        # 🚀 Startup Probe — allow cold start & DB init
         startupProbe:
           httpGet:
-            path: /health
+            path: /healthz
             port: 8080
           failureThreshold: 30
           periodSeconds: 10
 
+        # ✅ Readiness Probe — traffic eligibility
         readinessProbe:
           httpGet:
-            path: /health
+            path: /readyz
             port: 8080
-          initialDelaySeconds: 20
+          initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 2
-          failureThreshold: 5
+          failureThreshold: 3
 
+        # 💓 Liveness Probe — restart if stuck
         livenessProbe:
           httpGet:
-            path: /health
+            path: /healthz
             port: 8080
-          initialDelaySeconds: 60
+          initialDelaySeconds: 30
           periodSeconds: 20
           timeoutSeconds: 2
-          failureThreshold: 5
+          failureThreshold: 3
