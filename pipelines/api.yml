@@ -94,6 +94,8 @@ stages:
                 kubectl apply -f k8s/cluster/ingress-nginx/nginx-service.yaml -n ingress-nginx
 
                 # Deploy app (namespace comes from overlay)
+                kubectl apply -f k8s/namespaces/dev.yaml
+
                 kubectl apply -k k8s/overlays/dev
 
                 kubectl get pods -n $(NAMESPACE_DEV)
@@ -130,7 +132,7 @@ stages:
                 kubectl get ns ingress-nginx >/dev/null 2>&1 || kubectl apply -f k8s/cluster/ingress-nginx/namespace-ingress.yaml
                 kubectl apply -f k8s/cluster/ingress-nginx/nginx-controller.yaml -n ingress-nginx
                 kubectl apply -f k8s/cluster/ingress-nginx/nginx-service.yaml -n ingress-nginx
-
+                kubectl apply -f k8s/namespaces/qa.yaml
                 kubectl apply -k k8s/overlays/qa
 
                 kubectl get pods -n $(NAMESPACE_QA)
@@ -167,7 +169,7 @@ stages:
                 kubectl get ns ingress-nginx >/dev/null 2>&1 || kubectl apply -f k8s/cluster/ingress-nginx/namespace-ingress.yaml
                 kubectl apply -f k8s/cluster/ingress-nginx/nginx-controller.yaml -n ingress-nginx
                 kubectl apply -f k8s/cluster/ingress-nginx/nginx-service.yaml -n ingress-nginx
-
+                kubectl apply -f k8s/namespaces/prod.yaml
                 kubectl apply -k k8s/overlays/prod
 
                 kubectl get pods -n $(NAMESPACE_PROD)
