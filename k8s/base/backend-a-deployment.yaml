@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend-a-moath
-  namespace: moath-webapp
 spec:
   replicas: 2
   progressDeadlineSeconds: 600
@@ -16,10 +15,9 @@ spec:
     spec:
       containers:
       - name: backend-a
-        image: acrmoath.azurecr.io/backend-a:latest
-
+        image: acrmoath.azurecr.io/backend-a
         ports:
-        - containerPort: 8080   # ✅ FIX
+        - containerPort: 8080
 
         resources:
           requests:

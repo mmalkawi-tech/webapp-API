@@ -2,7 +2,6 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: backend-b-hpa-moath
-  namespace: moath-webapp
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

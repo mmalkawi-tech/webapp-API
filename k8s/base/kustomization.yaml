@@ -1,13 +1,14 @@
 resources:
-- namespace.yaml
 - secret-postgres.yaml
 - configmap-db.yaml
+
 - backend-a-deployment.yaml
 - backend-a-service.yaml
+- backend-a-hpa.yaml
+
 - backend-b-deployment.yaml
 - backend-b-service.yaml
+- backend-b-hpa.yaml
+
 - network-policy-backend.yaml
 - network-policy-backend-b.yaml
-- backend-a-hpa.yaml
-- backend-b-hpa.yaml
-- ingress

@@ -1,10 +1,20 @@
 resources:
   - ../../base
+  - ingress.yaml
+
+namespace: moath-webapp-qa
+
+configMapGenerator:
+  - name: db-config-moath
+    behavior: replace
+    literals:
+      - DB_HOST=pg-moath-qa.postgres.database.azure.com
+      - DB_PORT=5432
+      - DB_NAME=webappdb
+      - DB_USER=pgadmin
 
 images:
-  - name: backend-a
-    newName: acrmoath.azurecr.io/backend-a-moath
+  - name: acrmoath.azurecr.io/backend-a
     newTag: latest
-  - name: backend-b
-    newName: acrmoath.azurecr.io/backend-b-moath
+  - name: acrmoath.azurecr.io/backend-b
     newTag: latest

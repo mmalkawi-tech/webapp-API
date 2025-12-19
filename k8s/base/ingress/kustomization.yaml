@@ -1,6 +1,0 @@
-resources:
-- namespace-ingress.yaml
-- nginx-controller.yaml
-- nginx-service.yaml
-- ingress-moath.yaml
-- tls-secret.yaml

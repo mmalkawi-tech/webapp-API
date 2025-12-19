@@ -3,8 +3,11 @@ kind: Service
 metadata:
   name: ingress-nginx-controller
   namespace: ingress-nginx
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /healthz
 spec:
   type: LoadBalancer
+  externalTrafficPolicy: Local
   selector:
     app: ingress-nginx
   ports:

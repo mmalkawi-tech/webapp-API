@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: moath-webapp-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /api/a(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-a-moath
+            port:
+              number: 80
+
+      - path: /api/b(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-b-moath
+            port:
+              number: 80
