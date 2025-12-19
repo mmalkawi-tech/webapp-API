@@ -16,6 +16,17 @@ const pool = new Pool({
 
 const app = express();
 
+// Liveness probe — app is running
+app.get("/healthz", (req, res) => {
+  res.status(200).json({ status: "ok", service: "backend-a" });
+});
+
+// Readiness probe — app is ready to receive traffic
+app.get("/readyz", (req, res) => {
+  // Later we can add DB checks here
+  res.status(200).json({ status: "ready", service: "backend-a" });
+});
+
 // Enable CORS for local development
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
