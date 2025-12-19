@@ -12,31 +12,55 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
+# 🔐 Variable group with DB secrets
 variables:
-  AZURE_SERVICE_CONNECTION: "moath-sp-new"
+- group: db-secrets
 
-  ACR_NAME: "acrmoath"
-  ACR_LOGIN_SERVER: "acrmoath.azurecr.io"
+- name: AZURE_SERVICE_CONNECTION
+  value: "moath-sp-new"
 
-  AKS_NAME_DEV: "aks-moath-dev"
-  AKS_RG_DEV: "rg-moath-dev"
+- name: ACR_NAME
+  value: "acrmoath"
 
-  AKS_NAME_QA: "aks-moath-qa"
-  AKS_RG_QA: "rg-moath-qa"
+- name: ACR_LOGIN_SERVER
+  value: "acrmoath.azurecr.io"
 
-  AKS_NAME_PROD: "aks-moath-prod"
-  AKS_RG_PROD: "rg-moath-prod"
+- name: AKS_NAME_DEV
+  value: "aks-moath-dev"
 
-  NAMESPACE_DEV:  "moath-webapp-dev"
-  NAMESPACE_QA:   "moath-webapp-qa"
-  NAMESPACE_PROD: "moath-webapp-prod"
+- name: AKS_RG_DEV
+  value: "rg-moath-dev"
 
+- name: AKS_NAME_QA
+  value: "aks-moath-qa"
+
+- name: AKS_RG_QA
+  value: "rg-moath-qa"
+
+- name: AKS_NAME_PROD
+  value: "aks-moath-prod"
+
+- name: AKS_RG_PROD
+  value: "rg-moath-prod"
+
+- name: NAMESPACE_DEV
+  value: "moath-webapp-dev"
+
+- name: NAMESPACE_QA
+  value: "moath-webapp-qa"
+
+- name: NAMESPACE_PROD
+  value: "moath-webapp-prod"
+
+# =========================================================
+# BUILD STAGE
+# =========================================================
 stages:
 - stage: Build
   displayName: "Build & Push Images to ACR"
   jobs:
   - job: BuildPush
-    displayName: "Build backend-a-moath & backend-b-moath"
+    displayName: "Build backend images"
     steps:
     - checkout: self
 
@@ -47,13 +71,14 @@ stages:
         scriptType: bash
         scriptLocation: inlineScript
         inlineScript: |
-          set -e
           az acr login --name $(ACR_NAME)
 
     - script: |
-        set -e
-        docker build -t $(ACR_LOGIN_SERVER)/backend-a-moath:$(Build.BuildId) -t $(ACR_LOGIN_SERVER)/backend-a-moath:latest ./backend-a
-        docker build -t $(ACR_LOGIN_SERVER)/backend-b-moath:$(Build.BuildId) -t $(ACR_LOGIN_SERVER)/backend-b-moath:latest ./backend-b
+        docker build -t $(ACR_LOGIN_SERVER)/backend-a-moath:$(Build.BuildId) \
+                     -t $(ACR_LOGIN_SERVER)/backend-a-moath:latest ./backend-a
+
+        docker build -t $(ACR_LOGIN_SERVER)/backend-b-moath:$(Build.BuildId) \
+                     -t $(ACR_LOGIN_SERVER)/backend-b-moath:latest ./backend-b
 
         docker push $(ACR_LOGIN_SERVER)/backend-a-moath:$(Build.BuildId)
         docker push $(ACR_LOGIN_SERVER)/backend-a-moath:latest
@@ -61,12 +86,14 @@ stages:
         docker push $(ACR_LOGIN_SERVER)/backend-b-moath:latest
       displayName: "Docker Build & Push"
 
+# =========================================================
+# DEV STAGE
+# =========================================================
 - stage: Dev
   displayName: "Deploy DEV"
   dependsOn: Build
   jobs:
   - deployment: DeployDev
-    displayName: "Deploy to AKS DEV"
     environment: dev
     strategy:
       runOnce:
@@ -79,7 +106,7 @@ stages:
               kubectlVersion: "latest"
 
           - task: AzureCLI@2
-            displayName: "Deploy DEV via Kustomize"
+            displayName: "Deploy DEV"
             inputs:
               azureSubscription: $(AZURE_SERVICE_CONNECTION)
               scriptType: bash
@@ -88,26 +115,33 @@ stages:
                 set -e
                 az aks get-credentials -g $(AKS_RG_DEV) -n $(AKS_NAME_DEV) --overwrite-existing
 
-                # Install ingress-nginx once per cluster (safe if already installed)
-                kubectl get ns ingress-nginx >/dev/null 2>&1 || kubectl apply -f k8s/cluster/ingress-nginx/namespace-ingress.yaml
-                kubectl apply -f k8s/cluster/ingress-nginx/nginx-controller.yaml -n ingress-nginx
-                kubectl apply -f k8s/cluster/ingress-nginx/nginx-service.yaml -n ingress-nginx
-
-                # Deploy app (namespace comes from overlay)
+                # Namespace
                 kubectl apply -f k8s/namespaces/dev.yaml
 
+                # 🔐 Create/update DB secret (DEV)
+                kubectl create secret generic postgres-secret-moath \
+                  -n $(NAMESPACE_DEV) \
+                  --from-literal=POSTGRES_PASSWORD=$(DB_PASSWORD_DEV) \
+                  --dry-run=client -o yaml | kubectl apply -f -
+
+                # Deploy app
                 kubectl apply -k k8s/overlays/dev
 
-                kubectl get pods -n $(NAMESPACE_DEV)
-                kubectl get svc  -n $(NAMESPACE_DEV)
-                kubectl get ingress -n $(NAMESPACE_DEV)
+                # 🔄 Restart pods to pick up secret
+                kubectl rollout restart deploy/backend-a-moath -n $(NAMESPACE_DEV)
+                kubectl rollout restart deploy/backend-b-moath -n $(NAMESPACE_DEV)
 
+                kubectl rollout status deploy/backend-a-moath -n $(NAMESPACE_DEV)
+                kubectl rollout status deploy/backend-b-moath -n $(NAMESPACE_DEV)
+
+# =========================================================
+# QA STAGE
+# =========================================================
 - stage: QA
   displayName: "Deploy QA"
   dependsOn: Dev
   jobs:
   - deployment: DeployQA
-    displayName: "Deploy to AKS QA"
     environment: qa
     strategy:
       runOnce:
@@ -120,7 +154,7 @@ stages:
               kubectlVersion: "latest"
 
           - task: AzureCLI@2
-            displayName: "Deploy QA via Kustomize"
+            displayName: "Deploy QA"
             inputs:
               azureSubscription: $(AZURE_SERVICE_CONNECTION)
               scriptType: bash
@@ -129,22 +163,29 @@ stages:
                 set -e
                 az aks get-credentials -g $(AKS_RG_QA) -n $(AKS_NAME_QA) --overwrite-existing
 
-                kubectl get ns ingress-nginx >/dev/null 2>&1 || kubectl apply -f k8s/cluster/ingress-nginx/namespace-ingress.yaml
-                kubectl apply -f k8s/cluster/ingress-nginx/nginx-controller.yaml -n ingress-nginx
-                kubectl apply -f k8s/cluster/ingress-nginx/nginx-service.yaml -n ingress-nginx
                 kubectl apply -f k8s/namespaces/qa.yaml
+
+                kubectl create secret generic postgres-secret-moath \
+                  -n $(NAMESPACE_QA) \
+                  --from-literal=POSTGRES_PASSWORD=$(DB_PASSWORD_QA) \
+                  --dry-run=client -o yaml | kubectl apply -f -
+
                 kubectl apply -k k8s/overlays/qa
 
-                kubectl get pods -n $(NAMESPACE_QA)
-                kubectl get svc  -n $(NAMESPACE_QA)
-                kubectl get ingress -n $(NAMESPACE_QA)
+                kubectl rollout restart deploy/backend-a-moath -n $(NAMESPACE_QA)
+                kubectl rollout restart deploy/backend-b-moath -n $(NAMESPACE_QA)
 
+                kubectl rollout status deploy/backend-a-moath -n $(NAMESPACE_QA)
+                kubectl rollout status deploy/backend-b-moath -n $(NAMESPACE_QA)
+
+# =========================================================
+# PROD STAGE
+# =========================================================
 - stage: Prod
   displayName: "Deploy PROD"
   dependsOn: QA
   jobs:
   - deployment: DeployProd
-    displayName: "Deploy to AKS PROD"
     environment: prod
     strategy:
       runOnce:
@@ -157,7 +198,7 @@ stages:
               kubectlVersion: "latest"
 
           - task: AzureCLI@2
-            displayName: "Deploy PROD via Kustomize"
+            displayName: "Deploy PROD"
             inputs:
               azureSubscription: $(AZURE_SERVICE_CONNECTION)
               scriptType: bash
@@ -166,12 +207,17 @@ stages:
                 set -e
                 az aks get-credentials -g $(AKS_RG_PROD) -n $(AKS_NAME_PROD) --overwrite-existing
 
-                kubectl get ns ingress-nginx >/dev/null 2>&1 || kubectl apply -f k8s/cluster/ingress-nginx/namespace-ingress.yaml
-                kubectl apply -f k8s/cluster/ingress-nginx/nginx-controller.yaml -n ingress-nginx
-                kubectl apply -f k8s/cluster/ingress-nginx/nginx-service.yaml -n ingress-nginx
                 kubectl apply -f k8s/namespaces/prod.yaml
+
+                kubectl create secret generic postgres-secret-moath \
+                  -n $(NAMESPACE_PROD) \
+                  --from-literal=POSTGRES_PASSWORD=$(DB_PASSWORD_PROD) \
+                  --dry-run=client -o yaml | kubectl apply -f -
+
                 kubectl apply -k k8s/overlays/prod
 
-                kubectl get pods -n $(NAMESPACE_PROD)
-                kubectl get svc  -n $(NAMESPACE_PROD)
-                kubectl get ingress -n $(NAMESPACE_PROD)
+                kubectl rollout restart deploy/backend-a-moath -n $(NAMESPACE_PROD)
+                kubectl rollout restart deploy/backend-b-moath -n $(NAMESPACE_PROD)
+
+                kubectl rollout status deploy/backend-a-moath -n $(NAMESPACE_PROD)
+                kubectl rollout status deploy/backend-b-moath -n $(NAMESPACE_PROD)
