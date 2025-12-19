@@ -1,5 +1,4 @@
 resources:
-- secret-postgres.yaml
 - configmap-db.yaml
 
 - backend-a-deployment.yaml
