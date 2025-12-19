@@ -6,6 +6,11 @@ const { Pool } = require("pg");
 const BACKEND = "backend-a";
 const PORT = process.env.PORT || 8080;
 
+/**
+ * =========================
+ * PostgreSQL (SSL enabled)
+ * =========================
+ */
 const pool = new Pool({
   host: process.env.DB_HOST,
   port: process.env.DB_PORT,
@@ -19,18 +24,32 @@ const pool = new Pool({
 
 const app = express();
 
-// Liveness probe — app is running
+/**
+ * =========================
+ * Health Probes (K8s)
+ * =========================
+ */
+
+// Liveness probe — app process is alive
 app.get("/healthz", (req, res) => {
-  res.status(200).json({ status: "ok", service: "backend-a" });
+  res.status(200).json({ status: "ok", service: BACKEND });
 });
 
-// Readiness probe — app is ready to receive traffic
+// Readiness probe — app is ready for traffic
 app.get("/readyz", (req, res) => {
-  // Later we can add DB checks here
-  res.status(200).json({ status: "ready", service: "backend-a" });
+  res.status(200).json({ status: "ready", service: BACKEND });
 });
 
-// Enable CORS for local development
+// Optional simple health endpoint
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", backend: BACKEND, port: PORT });
+});
+
+/**
+ * =========================
+ * CORS
+ * =========================
+ */
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -41,12 +60,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoint
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", backend: BACKEND, port: PORT });
-});
-
-app.post("/api/a", upload.single("image"), async (req, res) => {
+/**
+ * =========================
+ * MAIN API ENDPOINT
+ * =========================
+ * IMPORTANT:
+ * Ingress rewrites /api/a → /
+ */
+app.post("/", upload.single("image"), async (req, res) => {
   try {
     const image = req.file ? req.file.buffer : null;
 
@@ -67,9 +88,14 @@ app.post("/api/a", upload.single("image"), async (req, res) => {
     });
 
   } catch (err) {
-    res.status(500).json({ error: "Database not responding", details: err.message });
+    console.error(err);
+    res.status(500).json({
+      error: "Database not responding",
+      details: err.message
+    });
   }
 });
 
-app.listen(PORT, () => console.log(`${BACKEND} running on port ${PORT}`));
-
+app.listen(PORT, () => {
+  console.log(`${BACKEND} running on port ${PORT}`);
+});
