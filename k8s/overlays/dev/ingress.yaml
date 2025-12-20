@@ -3,6 +3,7 @@ kind: Ingress
 metadata:
   name: moath-webapp-ingress
   annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: nginx
@@ -16,7 +17,6 @@ spec:
             name: backend-a-moath
             port:
               number: 80
-
       - path: /api/b(/|$)(.*)
         pathType: Prefix
         backend:
