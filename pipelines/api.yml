@@ -12,7 +12,9 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
-# 🔐 Variable group with DB secrets
+# =========================================================
+# VARIABLES
+# =========================================================
 variables:
 - group: db-secrets
 
@@ -25,36 +27,15 @@ variables:
 - name: ACR_LOGIN_SERVER
   value: "acrmoath.azurecr.io"
 
-- name: AKS_NAME_DEV
-  value: "aks-moath-dev"
-- name: AKS_RG_DEV
-  value: "rg-moath-dev"
-
-- name: AKS_NAME_QA
-  value: "aks-moath-qa"
-- name: AKS_RG_QA
-  value: "rg-moath-qa"
-
-- name: AKS_NAME_PROD
-  value: "aks-moath-prod"
-- name: AKS_RG_PROD
-  value: "rg-moath-prod"
-
-- name: NAMESPACE_DEV
-  value: "moath-webapp-dev"
-- name: NAMESPACE_QA
-  value: "moath-webapp-qa"
-- name: NAMESPACE_PROD
-  value: "moath-webapp-prod"
-
 # =========================================================
 # BUILD STAGE
 # =========================================================
 stages:
 - stage: Build
-  displayName: "Build & Push Images"
+  displayName: "Build & Push Backend Images"
   jobs:
   - job: BuildPush
+    displayName: "Docker Build & Push"
     steps:
     - checkout: self
 
@@ -65,9 +46,11 @@ stages:
         scriptType: bash
         scriptLocation: inlineScript
         inlineScript: |
+          set -e
           az acr login --name $(ACR_NAME)
 
     - script: |
+        set -e
         docker build -t $(ACR_LOGIN_SERVER)/backend-a-moath:latest ./backend-a
         docker build -t $(ACR_LOGIN_SERVER)/backend-b-moath:latest ./backend-b
 
@@ -76,9 +59,10 @@ stages:
       displayName: "Build & Push Images"
 
 # =========================================================
-# DEV
+# DEV STAGE
 # =========================================================
 - stage: Dev
+  displayName: "Deploy DEV"
   dependsOn: Build
   jobs:
   - deployment: DeployDev
@@ -89,6 +73,10 @@ stages:
           steps:
           - checkout: self
 
+          - task: KubectlInstaller@0
+            inputs:
+              kubectlVersion: "latest"
+
           - task: AzureCLI@2
             displayName: "Deploy DEV"
             inputs:
@@ -96,24 +84,50 @@ stages:
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                az aks get-credentials -g $(AKS_RG_DEV) -n $(AKS_NAME_DEV) --overwrite-existing
+                set -e
 
-                kubectl get ns ingress-nginx || \
-                kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
+                az aks get-credentials -g rg-moath-dev -n aks-moath-dev --overwrite-existing
 
+                # Ingress controller (install once)
+                if ! kubectl get ns ingress-nginx >/dev/null 2>&1; then
+                  kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
+                fi
+
+                # WAIT for ingress controller + admission webhook
+                kubectl rollout status deployment/ingress-nginx-controller \
+                  -n ingress-nginx --timeout=180s
+
+                kubectl wait -n ingress-nginx \
+                  --for=condition=complete job/ingress-nginx-admission-create \
+                  --timeout=120s
+
+                kubectl wait -n ingress-nginx \
+                  --for=condition=complete job/ingress-nginx-admission-patch \
+                  --timeout=120s
+
+                # Namespace
                 kubectl apply -f k8s/namespaces/dev.yaml
 
+                # DB Secret
                 kubectl create secret generic postgres-secret-moath \
-                  -n $(NAMESPACE_DEV) \
+                  -n moath-webapp-dev \
                   --from-literal=POSTGRES_PASSWORD="$(DB_PASSWORD_DEV)" \
                   --dry-run=client -o yaml | kubectl apply -f -
 
+                # Deploy app + ingress
                 kubectl apply -k k8s/overlays/dev
 
+                kubectl rollout restart deployment/backend-a-moath -n moath-webapp-dev
+                kubectl rollout restart deployment/backend-b-moath -n moath-webapp-dev
+
+                kubectl rollout status deployment/backend-a-moath -n moath-webapp-dev
+                kubectl rollout status deployment/backend-b-moath -n moath-webapp-dev
+
 # =========================================================
-# QA
+# QA STAGE
 # =========================================================
 - stage: QA
+  displayName: "Deploy QA"
   dependsOn: Dev
   jobs:
   - deployment: DeployQA
@@ -124,6 +138,10 @@ stages:
           steps:
           - checkout: self
 
+          - task: KubectlInstaller@0
+            inputs:
+              kubectlVersion: "latest"
+
           - task: AzureCLI@2
             displayName: "Deploy QA"
             inputs:
@@ -131,21 +149,45 @@ stages:
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                az aks get-credentials -g $(AKS_RG_QA) -n $(AKS_NAME_QA) --overwrite-existing
+                set -e
+
+                az aks get-credentials -g rg-moath-qa -n aks-moath-qa --overwrite-existing
+
+                if ! kubectl get ns ingress-nginx >/dev/null 2>&1; then
+                  kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
+                fi
+
+                kubectl rollout status deployment/ingress-nginx-controller \
+                  -n ingress-nginx --timeout=180s
+
+                kubectl wait -n ingress-nginx \
+                  --for=condition=complete job/ingress-nginx-admission-create \
+                  --timeout=120s
+
+                kubectl wait -n ingress-nginx \
+                  --for=condition=complete job/ingress-nginx-admission-patch \
+                  --timeout=120s
 
                 kubectl apply -f k8s/namespaces/qa.yaml
 
                 kubectl create secret generic postgres-secret-moath \
-                  -n $(NAMESPACE_QA) \
+                  -n moath-webapp-qa \
                   --from-literal=POSTGRES_PASSWORD="$(DB_PASSWORD_QA)" \
                   --dry-run=client -o yaml | kubectl apply -f -
 
                 kubectl apply -k k8s/overlays/qa
 
+                kubectl rollout restart deployment/backend-a-moath -n moath-webapp-qa
+                kubectl rollout restart deployment/backend-b-moath -n moath-webapp-qa
+
+                kubectl rollout status deployment/backend-a-moath -n moath-webapp-qa
+                kubectl rollout status deployment/backend-b-moath -n moath-webapp-qa
+
 # =========================================================
-# PROD
+# PROD STAGE
 # =========================================================
 - stage: Prod
+  displayName: "Deploy PROD"
   dependsOn: QA
   jobs:
   - deployment: DeployProd
@@ -156,6 +198,10 @@ stages:
           steps:
           - checkout: self
 
+          - task: KubectlInstaller@0
+            inputs:
+              kubectlVersion: "latest"
+
           - task: AzureCLI@2
             displayName: "Deploy PROD"
             inputs:
@@ -163,13 +209,36 @@ stages:
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                az aks get-credentials -g $(AKS_RG_PROD) -n $(AKS_NAME_PROD) --overwrite-existing
+                set -e
+
+                az aks get-credentials -g rg-moath-prod -n aks-moath-prod --overwrite-existing
+
+                if ! kubectl get ns ingress-nginx >/dev/null 2>&1; then
+                  kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
+                fi
+
+                kubectl rollout status deployment/ingress-nginx-controller \
+                  -n ingress-nginx --timeout=180s
+
+                kubectl wait -n ingress-nginx \
+                  --for=condition=complete job/ingress-nginx-admission-create \
+                  --timeout=120s
+
+                kubectl wait -n ingress-nginx \
+                  --for=condition=complete job/ingress-nginx-admission-patch \
+                  --timeout=120s
 
                 kubectl apply -f k8s/namespaces/prod.yaml
 
                 kubectl create secret generic postgres-secret-moath \
-                  -n $(NAMESPACE_PROD) \
+                  -n moath-webapp-prod \
                   --from-literal=POSTGRES_PASSWORD="$(DB_PASSWORD_PROD)" \
                   --dry-run=client -o yaml | kubectl apply -f -
 
                 kubectl apply -k k8s/overlays/prod
+
+                kubectl rollout restart deployment/backend-a-moath -n moath-webapp-prod
+                kubectl rollout restart deployment/backend-b-moath -n moath-webapp-prod
+
+                kubectl rollout status deployment/backend-a-moath -n moath-webapp-prod
+                kubectl rollout status deployment/backend-b-moath -n moath-webapp-prod
