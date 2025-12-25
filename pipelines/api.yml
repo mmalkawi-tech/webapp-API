@@ -50,7 +50,7 @@ stages:
     - checkout: self
 
     # ---------- SAST: SONARQUBE ----------
-    - task: SonarQubePrepare@8
+    - task: SonarQubePrepare@4
       displayName: "Prepare SonarQube Analysis"
       inputs:
         SonarQube: $(SONAR_SERVICE_CONNECTION)
@@ -60,10 +60,10 @@ stages:
         cliProjectName: $(SONAR_PROJECT_NAME)
         cliSources: "backend-a,backend-b"
 
-    - task: SonarQubeAnalyze@8
+    - task: SonarQubeAnalyze@4
       displayName: "Run SonarQube SAST Analysis"
 
-    - task: SonarQubePublish@8
+    - task: SonarQubePublish@4
       displayName: "Enforce Quality Gate"
       inputs:
         pollingTimeoutSec: "300"
