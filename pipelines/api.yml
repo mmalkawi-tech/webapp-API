@@ -38,18 +38,18 @@ variables:
   value: "SonarQube-moath"
 
 # =========================================================
-# BUILD STAGE
+# BUILD + SECURITY STAGE
 # =========================================================
 stages:
 - stage: Build
   displayName: "Build, Scan and Push Backend Images"
   jobs:
   - job: BuildPush
-    displayName: "Code Scan + Build + Trivy"
+    displayName: "Code Scan + Docker Build + Trivy"
     steps:
     - checkout: self
 
-    # ---------- SAST STEP ----------
+    # ---------- SAST: SONARQUBE ----------
     - task: SonarQubePrepare@8
       displayName: "Prepare SonarQube Analysis"
       inputs:
@@ -100,7 +100,7 @@ stages:
           --severity CRITICAL \
           --exit-code 1 \
           backend-a-local
-      displayName: "Trivy Scan Backend A (FAIL on Critical)"
+      displayName: "Trivy Scan Backend A (fail on CRITICAL)"
 
     - script: |
         set -e
@@ -108,9 +108,9 @@ stages:
           --severity CRITICAL \
           --exit-code 1 \
           backend-b-local
-      displayName: "Trivy Scan Backend B (FAIL on Critical)"
+      displayName: "Trivy Scan Backend B (fail on CRITICAL)"
 
-    # ---------- TAG + PUSH (ONLY IF SAFE) ----------
+    # ---------- TAG + PUSH ----------
     - script: |
         set -e
         docker tag backend-a-local $(ACR_LOGIN_SERVER)/backend-a-moath:latest
@@ -120,9 +120,8 @@ stages:
         docker push $(ACR_LOGIN_SERVER)/backend-b-moath:latest
       displayName: "Push Images to ACR"
 
-
 # =========================================================
-# DEV STAGE
+# DEV
 # =========================================================
 - stage: Dev
   displayName: "Deploy DEV"
@@ -157,9 +156,6 @@ stages:
 
                 kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=180s
 
-                kubectl wait -n ingress-nginx --for=condition=complete job/ingress-nginx-admission-create --timeout=120s
-                kubectl wait -n ingress-nginx --for=condition=complete job/ingress-nginx-admission-patch --timeout=120s
-
                 kubectl apply -f k8s/namespaces/dev.yaml
 
                 kubectl create secret generic postgres-secret-moath \
@@ -169,12 +165,8 @@ stages:
 
                 kubectl apply -k k8s/overlays/dev
 
-                kubectl rollout status deployment/backend-a-moath -n moath-webapp-dev
-                kubectl rollout status deployment/backend-b-moath -n moath-webapp-dev
-
-
 # =========================================================
-# QA STAGE
+# QA
 # =========================================================
 - stage: QA
   displayName: "Deploy QA"
@@ -203,12 +195,6 @@ stages:
 
                 az aks get-credentials -g rg-moath-qa -n aks-moath-qa --overwrite-existing
 
-                if ! kubectl get ns ingress-nginx >/dev/null 2>&1; then
-                  kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
-                fi
-
-                kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=180s
-
                 kubectl apply -f k8s/namespaces/qa.yaml
 
                 kubectl create secret generic postgres-secret-moath \
@@ -218,12 +204,8 @@ stages:
 
                 kubectl apply -k k8s/overlays/qa
 
-                kubectl rollout status deployment/backend-a-moath -n moath-webapp-qa
-                kubectl rollout status deployment/backend-b-moath -n moath-webapp-qa
-
-
 # =========================================================
-# PROD STAGE
+# PROD
 # =========================================================
 - stage: Prod
   displayName: "Deploy PROD"
@@ -252,12 +234,6 @@ stages:
 
                 az aks get-credentials -g rg-moath-prod -n aks-moath-prod --overwrite-existing
 
-                if ! kubectl get ns ingress-nginx >/dev/null 2>&1; then
-                  kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
-                fi
-
-                kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=180s
-
                 kubectl apply -f k8s/namespaces/prod.yaml
 
                 kubectl create secret generic postgres-secret-moath \
@@ -266,6 +242,3 @@ stages:
                   --dry-run=client -o yaml | kubectl apply -f -
 
                 kubectl apply -k k8s/overlays/prod
-
-                kubectl rollout status deployment/backend-a-moath -n moath-webapp-prod
-                kubectl rollout status deployment/backend-b-moath -n moath-webapp-prod
