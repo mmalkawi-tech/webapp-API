@@ -50,7 +50,7 @@ stages:
     - checkout: self
 
     # ---------- SONARQUBE PREP ----------
-    - task: SonarQubePrepare@5
+    - task: SonarQubePrepare@8
       displayName: "Prepare SonarQube Analysis"
       inputs:
         SonarQube: $(SONARQUBE_SERVICE_CONNECTION)
@@ -64,11 +64,11 @@ stages:
           sonar.java.binaries=.
 
     # ---------- SONARQUBE ANALYZE ----------
-    - task: SonarQubeAnalyze@5
+    - task: SonarQubeAnalyze@8
       displayName: "Run SonarQube Scan"
 
     # ---------- QUALITY GATE ENFORCEMENT ----------
-    - task: SonarQubePublish@5
+    - task: SonarQubePublish@8
       displayName: "Check Quality Gate"
       inputs:
         pollingTimeoutSec: 300
