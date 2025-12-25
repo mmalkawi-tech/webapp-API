@@ -60,7 +60,7 @@ stages:
         cliProjectName: $(SONARQUBE_PROJECT_NAME)
         extraProperties: |
           sonar.sources=backend-a,backend-b
-          sonar.host.url=http://20.64.246.3/:9000
+          sonar.host.url=http://20.64.246.3:9000
           sonar.java.binaries=.
 
     # ---------- SONARQUBE ANALYZE ----------
