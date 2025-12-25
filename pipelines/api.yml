@@ -32,10 +32,17 @@ variables:
   value: "SonarCloud-connection"
 
 - name: SONARCLOUD_ORG
-  value: "moath-org"     # <-- change to your org name
+  value: "moathmalkawi0633"     # <-- change to your org name
 
 - name: SONARCLOUD_PROJECT_KEY
-  value: "moath-api"     # <-- matches sonar project key
+  value: "moathmalkawi0633_DevOps-Pipeline"     # <-- matches sonar project key
+  
+- name: SONARCLOUD_PROJECT_NAME
+  value: "DevOps Pipeline"
+
+- name: SONARCLOUD_SERVICE_CONNECTION
+  value: "SonarCloud"
+
 
 # =========================================================
 # BUILD + SECURITY STAGE
