@@ -62,6 +62,7 @@ stages:
           sonar.sources=backend-a,backend-b
           sonar.host.url=http://20.64.246.3:9000
           sonar.java.binaries=.
+          sonar.branch.name=
 
     # ---------- SONARQUBE ANALYZE ----------
     - task: SonarQubeAnalyze@8
