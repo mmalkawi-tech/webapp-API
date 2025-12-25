@@ -36,12 +36,9 @@ variables:
 
 - name: SONARCLOUD_PROJECT_KEY
   value: "moathmalkawi0633_DevOps-Pipeline"     # <-- matches sonar project key
-  
+
 - name: SONARCLOUD_PROJECT_NAME
   value: "DevOps Pipeline"
-
-- name: SONARCLOUD_SERVICE_CONNECTION
-  value: "SonarCloud"
 
 
 # =========================================================
