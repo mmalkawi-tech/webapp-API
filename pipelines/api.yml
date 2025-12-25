@@ -27,18 +27,15 @@ variables:
 - name: ACR_LOGIN_SERVER
   value: "acrmoath.azurecr.io"
 
-# ---------- SONARCLOUD ----------
-- name: SONARCLOUD_SERVICE_CONNECTION
-  value: "SonarCloud-connection"
+# ---------- SONARQUBE (SELF-HOSTED) ----------
+- name: SONARQUBE_SERVICE_CONNECTION
+  value: "SelfHosted-SonarQube-Connection"   # <-- name of service connection
 
-- name: SONARCLOUD_ORG
-  value: "moathmalkawi0633"     # <-- change to your org name
+- name: SONARQUBE_PROJECT_KEY
+  value: "moath-api"
 
-- name: SONARCLOUD_PROJECT_KEY
-  value: "moathmalkawi0633_DevOps-Pipeline"     # <-- matches sonar project key
-
-- name: SONARCLOUD_PROJECT_NAME
-  value: "DevOps Pipeline"
+- name: SONARQUBE_PROJECT_NAME
+  value: "moath-api"
 
 
 # =========================================================
@@ -52,30 +49,33 @@ stages:
     steps:
     - checkout: self
 
-    # ---------- SONARCLOUD PREP ----------
-    - task: SonarCloudPrepare@4
-      displayName: "Prepare SonarCloud Analysis"
+    # ---------- SONARQUBE PREP ----------
+    - task: SonarQubePrepare@5
+      displayName: "Prepare SonarQube Analysis"
       inputs:
-        SonarCloud: $(SONARCLOUD_SERVICE_CONNECTION)
-        organization: $(SONARCLOUD_ORG)
-        scannerMode: 'cli'
+        SonarQube: $(SONARQUBE_SERVICE_CONNECTION)
+        scannerMode: 'CLI'
         configMode: 'manual'
-        cliProjectKey: $(SONARCLOUD_PROJECT_KEY)
-        cliProjectName: "moath-api"
-        cliSources: "backend-a,backend-b"
+        cliProjectKey: $(SONARQUBE_PROJECT_KEY)
+        cliProjectName: $(SONARQUBE_PROJECT_NAME)
+        extraProperties: |
+          sonar.sources=backend-a,backend-b
+          sonar.host.url=http://<YOUR-PUBLIC-IP>:9000
+          sonar.java.binaries=.
 
-    # ---------- SONARCLOUD ANALYZE ----------
-    - task: SonarCloudAnalyze@4
-      displayName: "Run SonarCloud Analysis"
+    # ---------- SONARQUBE ANALYZE ----------
+    - task: SonarQubeAnalyze@5
+      displayName: "Run SonarQube Scan"
 
     # ---------- QUALITY GATE ENFORCEMENT ----------
-    - task: SonarCloudPublish@4
+    - task: SonarQubePublish@5
       displayName: "Check Quality Gate"
       inputs:
         pollingTimeoutSec: 300
 
     # ---------- LOGIN TO ACR ----------
     - task: AzureCLI@2
+      displayName: "Azure Login ACR"
       inputs:
         azureSubscription: $(AZURE_SERVICE_CONNECTION)
         scriptType: bash
@@ -120,11 +120,13 @@ stages:
         docker push $(ACR_LOGIN_SERVER)/backend-b-moath:latest
       displayName: "Push Images to ACR"
 
+
 # =========================================================
 # DEV STAGE
 # =========================================================
 - stage: Dev
   dependsOn: Build
+  condition: succeeded()    # only deploy if security passes
   jobs:
   - deployment: DeployDev
     environment: dev
@@ -146,11 +148,13 @@ stages:
                 az aks get-credentials -g rg-moath-dev -n aks-moath-dev --overwrite-existing
                 kubectl apply -k k8s/overlays/dev
 
+
 # =========================================================
 # QA STAGE
 # =========================================================
 - stage: QA
   dependsOn: Dev
+  condition: succeeded()
   jobs:
   - deployment: DeployQA
     environment: qa
@@ -168,11 +172,13 @@ stages:
                 az aks get-credentials -g rg-moath-qa -n aks-moath-qa --overwrite-existing
                 kubectl apply -k k8s/overlays/qa
 
+
 # =========================================================
 # PROD STAGE
 # =========================================================
 - stage: Prod
   dependsOn: QA
+  condition: succeeded()
   jobs:
   - deployment: DeployProd
     environment: prod
