@@ -27,18 +27,48 @@ variables:
 - name: ACR_LOGIN_SERVER
   value: "acrmoath.azurecr.io"
 
+# ---------- SONARQUBE VARIABLES ----------
+- name: SONAR_PROJECT_KEY
+  value: "moath-api"
+
+- name: SONAR_PROJECT_NAME
+  value: "moath-api"
+
+- name: SONAR_SERVICE_CONNECTION
+  value: "SonarQube-moath"
+
 # =========================================================
 # BUILD STAGE
 # =========================================================
 stages:
 - stage: Build
-  displayName: "Build & Push Backend Images"
+  displayName: "Build, Scan and Push Backend Images"
   jobs:
   - job: BuildPush
-    displayName: "Docker Build & Push"
+    displayName: "Code Scan + Build + Trivy"
     steps:
     - checkout: self
 
+    # ---------- SAST STEP ----------
+    - task: SonarQubePrepare@5
+      displayName: "Prepare SonarQube Analysis"
+      inputs:
+        SonarQube: $(SONAR_SERVICE_CONNECTION)
+        scannerMode: "CLI"
+        configMode: "manual"
+        cliProjectKey: $(SONAR_PROJECT_KEY)
+        cliProjectName: $(SONAR_PROJECT_NAME)
+        cliSources: "backend-a,backend-b"
+
+    - task: SonarQubeAnalyze@5
+      displayName: "Run SonarQube SAST Analysis"
+
+    - task: SonarQubePublish@5
+      displayName: "Enforce Quality Gate"
+      inputs:
+        pollingTimeoutSec: "300"
+
+    # ---------- LOGIN ACR ----------
     - task: AzureCLI@2
       displayName: "Login to ACR"
       inputs:
@@ -49,14 +79,47 @@ stages:
           set -e
           az acr login --name $(ACR_NAME)
 
+    # ---------- DOCKER BUILD ----------
     - script: |
         set -e
-        docker build -t $(ACR_LOGIN_SERVER)/backend-a-moath:latest ./backend-a
-        docker build -t $(ACR_LOGIN_SERVER)/backend-b-moath:latest ./backend-b
+        docker build -t backend-a-local ./backend-a
+        docker build -t backend-b-local ./backend-b
+      displayName: "Build Docker Images"
+
+    # ---------- INSTALL TRIVY ----------
+    - script: |
+        set -e
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+          | sh -s -- -b /usr/local/bin
+      displayName: "Install Trivy"
+
+    # ---------- TRIVY SCANS ----------
+    - script: |
+        set -e
+        trivy image \
+          --severity CRITICAL \
+          --exit-code 1 \
+          backend-a-local
+      displayName: "Trivy Scan Backend A (FAIL on Critical)"
+
+    - script: |
+        set -e
+        trivy image \
+          --severity CRITICAL \
+          --exit-code 1 \
+          backend-b-local
+      displayName: "Trivy Scan Backend B (FAIL on Critical)"
+
+    # ---------- TAG + PUSH (ONLY IF SAFE) ----------
+    - script: |
+        set -e
+        docker tag backend-a-local $(ACR_LOGIN_SERVER)/backend-a-moath:latest
+        docker tag backend-b-local $(ACR_LOGIN_SERVER)/backend-b-moath:latest
 
         docker push $(ACR_LOGIN_SERVER)/backend-a-moath:latest
         docker push $(ACR_LOGIN_SERVER)/backend-b-moath:latest
-      displayName: "Build & Push Images"
+      displayName: "Push Images to ACR"
+
 
 # =========================================================
 # DEV STAGE
@@ -88,40 +151,27 @@ stages:
 
                 az aks get-credentials -g rg-moath-dev -n aks-moath-dev --overwrite-existing
 
-                # Ingress controller (install once)
                 if ! kubectl get ns ingress-nginx >/dev/null 2>&1; then
                   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
                 fi
 
-                # WAIT for ingress controller + admission webhook
-                kubectl rollout status deployment/ingress-nginx-controller \
-                  -n ingress-nginx --timeout=180s
+                kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=180s
 
-                kubectl wait -n ingress-nginx \
-                  --for=condition=complete job/ingress-nginx-admission-create \
-                  --timeout=120s
+                kubectl wait -n ingress-nginx --for=condition=complete job/ingress-nginx-admission-create --timeout=120s
+                kubectl wait -n ingress-nginx --for=condition=complete job/ingress-nginx-admission-patch --timeout=120s
 
-                kubectl wait -n ingress-nginx \
-                  --for=condition=complete job/ingress-nginx-admission-patch \
-                  --timeout=120s
-
-                # Namespace
                 kubectl apply -f k8s/namespaces/dev.yaml
 
-                # DB Secret
                 kubectl create secret generic postgres-secret-moath \
                   -n moath-webapp-dev \
                   --from-literal=POSTGRES_PASSWORD="$(DB_PASSWORD_DEV)" \
                   --dry-run=client -o yaml | kubectl apply -f -
 
-                # Deploy app + ingress
                 kubectl apply -k k8s/overlays/dev
-
-                kubectl rollout restart deployment/backend-a-moath -n moath-webapp-dev
-                kubectl rollout restart deployment/backend-b-moath -n moath-webapp-dev
 
                 kubectl rollout status deployment/backend-a-moath -n moath-webapp-dev
                 kubectl rollout status deployment/backend-b-moath -n moath-webapp-dev
+
 
 # =========================================================
 # QA STAGE
@@ -157,16 +207,7 @@ stages:
                   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
                 fi
 
-                kubectl rollout status deployment/ingress-nginx-controller \
-                  -n ingress-nginx --timeout=180s
-
-                kubectl wait -n ingress-nginx \
-                  --for=condition=complete job/ingress-nginx-admission-create \
-                  --timeout=120s
-
-                kubectl wait -n ingress-nginx \
-                  --for=condition=complete job/ingress-nginx-admission-patch \
-                  --timeout=120s
+                kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=180s
 
                 kubectl apply -f k8s/namespaces/qa.yaml
 
@@ -177,11 +218,9 @@ stages:
 
                 kubectl apply -k k8s/overlays/qa
 
-                kubectl rollout restart deployment/backend-a-moath -n moath-webapp-qa
-                kubectl rollout restart deployment/backend-b-moath -n moath-webapp-qa
-
                 kubectl rollout status deployment/backend-a-moath -n moath-webapp-qa
                 kubectl rollout status deployment/backend-b-moath -n moath-webapp-qa
+
 
 # =========================================================
 # PROD STAGE
@@ -217,16 +256,7 @@ stages:
                   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
                 fi
 
-                kubectl rollout status deployment/ingress-nginx-controller \
-                  -n ingress-nginx --timeout=180s
-
-                kubectl wait -n ingress-nginx \
-                  --for=condition=complete job/ingress-nginx-admission-create \
-                  --timeout=120s
-
-                kubectl wait -n ingress-nginx \
-                  --for=condition=complete job/ingress-nginx-admission-patch \
-                  --timeout=120s
+                kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=180s
 
                 kubectl apply -f k8s/namespaces/prod.yaml
 
@@ -236,9 +266,6 @@ stages:
                   --dry-run=client -o yaml | kubectl apply -f -
 
                 kubectl apply -k k8s/overlays/prod
-
-                kubectl rollout restart deployment/backend-a-moath -n moath-webapp-prod
-                kubectl rollout restart deployment/backend-b-moath -n moath-webapp-prod
 
                 kubectl rollout status deployment/backend-a-moath -n moath-webapp-prod
                 kubectl rollout status deployment/backend-b-moath -n moath-webapp-prod
