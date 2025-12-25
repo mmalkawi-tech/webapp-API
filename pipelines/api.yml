@@ -63,6 +63,7 @@ stages:
           sonar.host.url=http://20.64.246.3:9000
           sonar.java.binaries=.
           sonar.branch.name=
+          sonar.branch.target=
 
     # ---------- SONARQUBE ANALYZE ----------
     - task: SonarQubeAnalyze@8
