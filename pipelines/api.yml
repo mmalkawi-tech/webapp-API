@@ -27,92 +27,88 @@ variables:
 - name: ACR_LOGIN_SERVER
   value: "acrmoath.azurecr.io"
 
-# ---------- SONARQUBE VARIABLES ----------
-- name: SONAR_PROJECT_KEY
-  value: "moath-api"
+# ---------- SONARCLOUD ----------
+- name: SONARCLOUD_SERVICE_CONNECTION
+  value: "SonarCloud-connection"
 
-- name: SONAR_PROJECT_NAME
-  value: "moath-api"
+- name: SONARCLOUD_ORG
+  value: "moath-org"     # <-- change to your org name
 
-- name: SONAR_SERVICE_CONNECTION
-  value: "SonarQube-moath"
+- name: SONARCLOUD_PROJECT_KEY
+  value: "moath-api"     # <-- matches sonar project key
 
 # =========================================================
 # BUILD + SECURITY STAGE
 # =========================================================
 stages:
 - stage: Build
-  displayName: "Build, Scan and Push Backend Images"
+  displayName: "SAST + Build + Container Scan + Push"
   jobs:
   - job: BuildPush
-    displayName: "Code Scan + Docker Build + Trivy"
     steps:
     - checkout: self
 
-    # ---------- SAST: SONARQUBE ----------
-    - task: SonarQubePrepare@8
-      displayName: "Prepare SonarQube Analysis"
+    # ---------- SONARCLOUD PREP ----------
+    - task: SonarCloudPrepare@3
+      displayName: "Prepare SonarCloud Analysis"
       inputs:
-        SonarQube: $(SONAR_SERVICE_CONNECTION)
-        scannerMode: "CLI"
-        configMode: "manual"
-        cliProjectKey: $(SONAR_PROJECT_KEY)
-        cliProjectName: $(SONAR_PROJECT_NAME)
+        SonarCloud: $(SONARCLOUD_SERVICE_CONNECTION)
+        organization: $(SONARCLOUD_ORG)
+        scannerMode: 'cli'
+        configMode: 'manual'
+        cliProjectKey: $(SONARCLOUD_PROJECT_KEY)
+        cliProjectName: "moath-api"
         cliSources: "backend-a,backend-b"
 
-    - task: SonarQubeAnalyze@8
-      displayName: "Run SonarQube SAST Analysis"
+    # ---------- SONARCLOUD ANALYZE ----------
+    - task: SonarCloudAnalyze@3
+      displayName: "Run SonarCloud Analysis"
 
-    - task: SonarQubePublish@8
-      displayName: "Enforce Quality Gate"
+    # ---------- QUALITY GATE ENFORCEMENT ----------
+    - task: SonarCloudPublish@3
+      displayName: "Check Quality Gate"
       inputs:
-        pollingTimeoutSec: "300"
+        pollingTimeoutSec: 300
 
-    # ---------- LOGIN ACR ----------
+    # ---------- LOGIN TO ACR ----------
     - task: AzureCLI@2
-      displayName: "Login to ACR"
       inputs:
         azureSubscription: $(AZURE_SERVICE_CONNECTION)
         scriptType: bash
         scriptLocation: inlineScript
         inlineScript: |
-          set -e
           az acr login --name $(ACR_NAME)
 
-    # ---------- DOCKER BUILD ----------
+    # ---------- BUILD DOCKER ----------
     - script: |
-        set -e
         docker build -t backend-a-local ./backend-a
         docker build -t backend-b-local ./backend-b
       displayName: "Build Docker Images"
 
     # ---------- INSTALL TRIVY ----------
     - script: |
-        set -e
         curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
           | sh -s -- -b /usr/local/bin
       displayName: "Install Trivy"
 
-    # ---------- TRIVY SCANS ----------
+    # ---------- SCAN BACKEND A ----------
     - script: |
-        set -e
         trivy image \
           --severity CRITICAL \
           --exit-code 1 \
           backend-a-local
-      displayName: "Trivy Scan Backend A (fail on CRITICAL)"
+      displayName: "Trivy Scan Backend A (Fail on Critical)"
 
+    # ---------- SCAN BACKEND B ----------
     - script: |
-        set -e
         trivy image \
           --severity CRITICAL \
           --exit-code 1 \
           backend-b-local
-      displayName: "Trivy Scan Backend B (fail on CRITICAL)"
+      displayName: "Trivy Scan Backend B (Fail on Critical)"
 
     # ---------- TAG + PUSH ----------
     - script: |
-        set -e
         docker tag backend-a-local $(ACR_LOGIN_SERVER)/backend-a-moath:latest
         docker tag backend-b-local $(ACR_LOGIN_SERVER)/backend-b-moath:latest
 
@@ -121,10 +117,9 @@ stages:
       displayName: "Push Images to ACR"
 
 # =========================================================
-# DEV
+# DEV STAGE
 # =========================================================
 - stage: Dev
-  displayName: "Deploy DEV"
   dependsOn: Build
   jobs:
   - deployment: DeployDev
@@ -134,42 +129,23 @@ stages:
         deploy:
           steps:
           - checkout: self
-
           - task: KubectlInstaller@0
             inputs:
               kubectlVersion: "latest"
 
           - task: AzureCLI@2
-            displayName: "Deploy DEV"
             inputs:
               azureSubscription: $(AZURE_SERVICE_CONNECTION)
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                set -e
-
                 az aks get-credentials -g rg-moath-dev -n aks-moath-dev --overwrite-existing
-
-                if ! kubectl get ns ingress-nginx >/dev/null 2>&1; then
-                  kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
-                fi
-
-                kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=180s
-
-                kubectl apply -f k8s/namespaces/dev.yaml
-
-                kubectl create secret generic postgres-secret-moath \
-                  -n moath-webapp-dev \
-                  --from-literal=POSTGRES_PASSWORD="$(DB_PASSWORD_DEV)" \
-                  --dry-run=client -o yaml | kubectl apply -f -
-
                 kubectl apply -k k8s/overlays/dev
 
 # =========================================================
-# QA
+# QA STAGE
 # =========================================================
 - stage: QA
-  displayName: "Deploy QA"
   dependsOn: Dev
   jobs:
   - deployment: DeployQA
@@ -179,36 +155,19 @@ stages:
         deploy:
           steps:
           - checkout: self
-
-          - task: KubectlInstaller@0
-            inputs:
-              kubectlVersion: "latest"
-
           - task: AzureCLI@2
-            displayName: "Deploy QA"
             inputs:
               azureSubscription: $(AZURE_SERVICE_CONNECTION)
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                set -e
-
                 az aks get-credentials -g rg-moath-qa -n aks-moath-qa --overwrite-existing
-
-                kubectl apply -f k8s/namespaces/qa.yaml
-
-                kubectl create secret generic postgres-secret-moath \
-                  -n moath-webapp-qa \
-                  --from-literal=POSTGRES_PASSWORD="$(DB_PASSWORD_QA)" \
-                  --dry-run=client -o yaml | kubectl apply -f -
-
                 kubectl apply -k k8s/overlays/qa
 
 # =========================================================
-# PROD
+# PROD STAGE
 # =========================================================
 - stage: Prod
-  displayName: "Deploy PROD"
   dependsOn: QA
   jobs:
   - deployment: DeployProd
@@ -218,27 +177,11 @@ stages:
         deploy:
           steps:
           - checkout: self
-
-          - task: KubectlInstaller@0
-            inputs:
-              kubectlVersion: "latest"
-
           - task: AzureCLI@2
-            displayName: "Deploy PROD"
             inputs:
               azureSubscription: $(AZURE_SERVICE_CONNECTION)
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                set -e
-
                 az aks get-credentials -g rg-moath-prod -n aks-moath-prod --overwrite-existing
-
-                kubectl apply -f k8s/namespaces/prod.yaml
-
-                kubectl create secret generic postgres-secret-moath \
-                  -n moath-webapp-prod \
-                  --from-literal=POSTGRES_PASSWORD="$(DB_PASSWORD_PROD)" \
-                  --dry-run=client -o yaml | kubectl apply -f -
-
                 kubectl apply -k k8s/overlays/prod
