@@ -84,14 +84,39 @@ stages:
           | sh -s -- -b /usr/local/bin
       displayName: "Install Trivy"
 
-    # ---------- SCAN ----------
-    - script: trivy image --severity CRITICAL --exit-code 1 backend-a-local
-      displayName: "Scan Backend A"
+    # ---------- TRIVY HTML REPORT - BACKEND A ----------
+    - script: |
+        trivy image \
+          --format template \
+          --template "@contrib/html.tpl" \
+          --output trivy-backend-a.html \
+          backend-a-local
+      displayName: "Generate Trivy HTML Report - Backend A"
 
-    - script: trivy image --severity CRITICAL --exit-code 1 backend-b-local
-      displayName: "Scan Backend B"
+    # ---------- TRIVY HTML REPORT - BACKEND B ----------
+    - script: |
+        trivy image \
+          --format template \
+          --template "@contrib/html.tpl" \
+          --output trivy-backend-b.html \
+          backend-b-local
+      displayName: "Generate Trivy HTML Report - Backend B"
 
-    # ---------- PUSH ----------
+    # ---------- FAIL PIPELINE IF CRITICAL/HIGH ----------
+    - script: |
+        trivy image --severity CRITICAL,HIGH --exit-code 1 backend-a-local
+        trivy image --severity CRITICAL,HIGH --exit-code 1 backend-b-local
+      displayName: "Fail Build if High/Critical CVEs Found"
+
+    # ---------- PUBLISH HTML DASHBOARDS ----------
+    - task: PublishBuildArtifacts@1
+      displayName: "Publish Trivy HTML Reports"
+      inputs:
+        PathtoPublish: "$(System.DefaultWorkingDirectory)"
+        ArtifactName: "trivy-reports"
+        publishLocation: "Container"
+
+    # ---------- PUSH IMAGES ----------
     - script: |
         docker tag backend-a-local $(ACR_LOGIN_SERVER)/backend-a-moath:latest
         docker tag backend-b-local $(ACR_LOGIN_SERVER)/backend-b-moath:latest
