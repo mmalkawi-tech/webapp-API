@@ -46,18 +46,18 @@ stages:
     steps:
     - checkout: self
 
-    # ---------- RUN SONARQUBE SCAN (DOCKER, NO BRANCH) ----------
+    # ---------- RUN SONARQUBE SCAN (Docker, Community Edition safe) ----------
     - script: |
         docker run --rm \
           -e SONAR_HOST_URL=$(SONARQUBE_URL) \
-          -e SONAR_LOGIN=$(SONARQUBE_TOKEN) \
+          -e SONAR_TOKEN=$(SONARQUBE_TOKEN) \
           -v $(System.DefaultWorkingDirectory):/usr/src \
-          sonarsource/sonar-scanner-cli \
+          sonarsource/sonar-scanner-cli:latest \
           -Dsonar.projectKey=$(SONARQUBE_PROJECT_KEY) \
           -Dsonar.projectName="$(SONARQUBE_PROJECT_NAME)" \
           -Dsonar.sources=backend-a,backend-b \
           -Dsonar.java.binaries=.
-      displayName: "Run SonarQube Analysis (NO branch analysis)"
+      displayName: "Run SonarQube Analysis (Docker Scanner)"
       env:
         SONARQUBE_TOKEN: $(SONARQUBE_TOKEN)
 
@@ -97,7 +97,6 @@ stages:
         docker push $(ACR_LOGIN_SERVER)/backend-a-moath:latest
         docker push $(ACR_LOGIN_SERVER)/backend-b-moath:latest
       displayName: "Push Images to ACR"
-
 
 # =========================================================
 # DEV
