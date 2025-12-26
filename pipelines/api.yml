@@ -46,41 +46,30 @@ stages:
     steps:
     - checkout: self
 
-    # ---------- INSTALL SONAR SCANNER (WORKING SOURCE) ----------
-    - script: |
-        set -e
+    # ---------- PREPARE SONARQUBE ----------
+    - task: SonarQubePrepare@8
+      displayName: "Prepare SonarQube"
+      inputs:
+        SonarQube: "SelfHosted-SonarQube-Connection"
+        scannerMode: "CLI"
+        configMode: "manual"
+        cliProjectKey: "$(SONARQUBE_PROJECT_KEY)"
+        cliProjectName: "$(SONARQUBE_PROJECT_NAME)"
+        extraProperties: |
+          sonar.host.url=$(SONARQUBE_URL)
+          sonar.sources=backend-a,backend-b
+          sonar.java.binaries=.
+          # IMPORTANT: NO BRANCH ANALYSIS (Community Edition only)
 
-        SCANNER_VERSION=5.0.1.3006
-        FILE=sonar-scanner-$SCANNER_VERSION-linux-x64
-
-        echo "📥 Downloading SonarScanner $SCANNER_VERSION…"
-        curl -L -o scanner.zip \
-          https://get.sonarsource.com/sonar-scanner-cli/$FILE.zip
-
-        echo "📦 Unzipping…"
-        unzip -q scanner.zip
-
-        mv $FILE sonar-scanner
-        chmod +x sonar-scanner/bin/sonar-scanner
-
-        echo "✅ Installed version:"
-        sonar-scanner/bin/sonar-scanner --version
-      displayName: "Install SonarScanner CLI"
-
-    # ---------- RUN SONARQUBE SCAN ----------
-    - script: |
-        set -e
-
-        ./sonar-scanner/bin/sonar-scanner \
-          -Dsonar.projectKey=$(SONARQUBE_PROJECT_KEY) \
-          -Dsonar.projectName="$(SONARQUBE_PROJECT_NAME)" \
-          -Dsonar.host.url=$(SONARQUBE_URL) \
-          -Dsonar.login=$(SONARQUBE_TOKEN) \
-          -Dsonar.sources=backend-a,backend-b \
-          -Dsonar.java.binaries=.
+    # ---------- RUN SONAR SCAN ----------
+    - task: SonarQubeAnalyze@8
       displayName: "Run SonarQube Analysis"
-      env:
-        SONARQUBE_TOKEN: $(SONARQUBE_TOKEN)
+
+    # ---------- QUALITY GATE ----------
+    - task: SonarQubePublish@8
+      displayName: "Publish Sonar Results"
+      inputs:
+        pollingTimeoutSec: 300
 
     # ---------- LOGIN TO ACR ----------
     - task: AzureCLI@2
