@@ -49,38 +49,44 @@ stages:
     steps:
     - checkout: self
 
-            # ---------- INSTALL SONAR-SCANNER CLI ----------
+    # ---------- INSTALL SONAR-SCANNER CLI ----------
     - script: |
         set -e
 
-        echo "Fetching latest SonarScanner CLI download URL…"
-        LATEST_URL=$(curl -s https://api.github.com/repos/SonarSource/sonar-scanner-cli/releases/latest \
+        echo "👉 Fetching latest SonarScanner CLI release…"
+
+        JSON=$(curl -s \
+          -H "Accept: application/vnd.github+json" \
+          -H "User-Agent: azure-pipelines" \
+          https://api.github.com/repos/SonarSource/sonar-scanner-cli/releases/latest)
+
+        LATEST_URL=$(echo "$JSON" \
           | grep browser_download_url \
           | grep linux \
+          | grep zip \
+          | head -n 1 \
           | cut -d '"' -f 4)
 
-        echo "Latest release URL:"
+        if [ -z "$LATEST_URL" ]; then
+          echo "⚠️  GitHub API did not return asset — fallback to static link"
+          LATEST_URL="https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-6.2.1.4610-linux.zip"
+        fi
+
+        echo "📥 Downloading from:"
         echo "$LATEST_URL"
 
-        echo "Downloading package..."
-        curl -L -o scanner.zip "$LATEST_URL"
+        curl -L -H "User-Agent: azure-pipelines" -o scanner.zip "$LATEST_URL"
 
-        echo "Unzipping..."
+        echo "📦 Unzipping…"
         unzip -q scanner.zip
 
-        echo "Locate extracted folder..."
         SCANNER_DIR=$(ls -d sonar-scanner-*)
-
-        echo "Renaming to sonar-scanner..."
         mv "$SCANNER_DIR" sonar-scanner
-
-        echo "Make scanner executable..."
         chmod +x sonar-scanner/bin/sonar-scanner
 
-        echo "Validate installation..."
+        echo "✔ SonarScanner installed:"
         sonar-scanner/bin/sonar-scanner --version
       displayName: "Install Sonar Scanner CLI"
-
 
 
     # ---------- RUN SONARQUBE SCAN ----------
@@ -165,7 +171,6 @@ stages:
           - task: KubectlInstaller@0
             inputs:
               kubectlVersion: "latest"
-
           - task: AzureCLI@2
             inputs:
               azureSubscription: $(AZURE_SERVICE_CONNECTION)
