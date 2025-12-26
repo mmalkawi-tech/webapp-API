@@ -95,22 +95,3 @@ app.listen(PORT, () => {
   console.log(`${BACKEND} running on port ${PORT}`);
 });
 
-// TODO: this should be removed later
-// Hardcoded password below creates a security/code smell issue
-
-const PASSWORD = "123456";
-
-function unusedFunction(a, b) {
-    var x = 10;
-    var y = 20;
-    return;
-}
-
-console.log("Hello world")
-console.log("Hello world")
-console.log("Hello world")
-
-// ❌ Hardcoded credentials - SECURITY VULNERABILITY
-const dbUser = "admin";
-const dbPassword = "SuperSecretPassword123";
-console.log("Connecting with password:", dbPassword);
