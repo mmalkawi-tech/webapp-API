@@ -49,44 +49,19 @@ stages:
     steps:
     - checkout: self
 
-    # ---------- INSTALL SONAR-SCANNER CLI ----------
+        # ---------- INSTALL SONAR-SCANNER CLI (APT — RELIABLE) ----------
     - script: |
         set -e
+        echo "Updating apt repo…"
+        sudo apt-get update
 
-        echo "👉 Fetching latest SonarScanner CLI release…"
+        echo "Installing SonarScanner…"
+        sudo apt-get install -y sonar-scanner
 
-        JSON=$(curl -s \
-          -H "Accept: application/vnd.github+json" \
-          -H "User-Agent: azure-pipelines" \
-          https://api.github.com/repos/SonarSource/sonar-scanner-cli/releases/latest)
+        echo "Checking version…"
+        sonar-scanner --version
+      displayName: "Install SonarScanner via apt"
 
-        LATEST_URL=$(echo "$JSON" \
-          | grep browser_download_url \
-          | grep linux \
-          | grep zip \
-          | head -n 1 \
-          | cut -d '"' -f 4)
-
-        if [ -z "$LATEST_URL" ]; then
-          echo "⚠️  GitHub API did not return asset — fallback to static link"
-          LATEST_URL="https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-6.2.1.4610-linux.zip"
-        fi
-
-        echo "📥 Downloading from:"
-        echo "$LATEST_URL"
-
-        curl -L -H "User-Agent: azure-pipelines" -o scanner.zip "$LATEST_URL"
-
-        echo "📦 Unzipping…"
-        unzip -q scanner.zip
-
-        SCANNER_DIR=$(ls -d sonar-scanner-*)
-        mv "$SCANNER_DIR" sonar-scanner
-        chmod +x sonar-scanner/bin/sonar-scanner
-
-        echo "✔ SonarScanner installed:"
-        sonar-scanner/bin/sonar-scanner --version
-      displayName: "Install Sonar Scanner CLI"
 
 
     # ---------- RUN SONARQUBE SCAN ----------
