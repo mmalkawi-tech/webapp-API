@@ -46,30 +46,20 @@ stages:
     steps:
     - checkout: self
 
-    # ---------- PREPARE SONARQUBE ----------
-    - task: SonarQubePrepare@8
-      displayName: "Prepare SonarQube"
-      inputs:
-        SonarQube: "SelfHosted-SonarQube-Connection"
-        scannerMode: "CLI"
-        configMode: "manual"
-        cliProjectKey: "$(SONARQUBE_PROJECT_KEY)"
-        cliProjectName: "$(SONARQUBE_PROJECT_NAME)"
-        extraProperties: |
-          sonar.host.url=$(SONARQUBE_URL)
-          sonar.sources=backend-a,backend-b
-          sonar.java.binaries=.
-          # IMPORTANT: NO BRANCH ANALYSIS (Community Edition only)
-
-    # ---------- RUN SONAR SCAN ----------
-    - task: SonarQubeAnalyze@8
-      displayName: "Run SonarQube Analysis"
-
-    # ---------- QUALITY GATE ----------
-    - task: SonarQubePublish@8
-      displayName: "Publish Sonar Results"
-      inputs:
-        pollingTimeoutSec: 300
+    # ---------- RUN SONARQUBE SCAN (DOCKER, NO BRANCH) ----------
+    - script: |
+        docker run --rm \
+          -e SONAR_HOST_URL=$(SONARQUBE_URL) \
+          -e SONAR_LOGIN=$(SONARQUBE_TOKEN) \
+          -v $(System.DefaultWorkingDirectory):/usr/src \
+          sonarsource/sonar-scanner-cli \
+          -Dsonar.projectKey=$(SONARQUBE_PROJECT_KEY) \
+          -Dsonar.projectName="$(SONARQUBE_PROJECT_NAME)" \
+          -Dsonar.sources=backend-a,backend-b \
+          -Dsonar.java.binaries=.
+      displayName: "Run SonarQube Analysis (NO branch analysis)"
+      env:
+        SONARQUBE_TOKEN: $(SONARQUBE_TOKEN)
 
     # ---------- LOGIN TO ACR ----------
     - task: AzureCLI@2
@@ -93,7 +83,7 @@ stages:
           | sh -s -- -b /usr/local/bin
       displayName: "Install Trivy"
 
-    # ---------- SCAN IMAGES ----------
+    # ---------- SCAN ----------
     - script: trivy image --severity CRITICAL --exit-code 1 backend-a-local
       displayName: "Scan Backend A"
     - script: trivy image --severity CRITICAL --exit-code 1 backend-b-local
@@ -107,6 +97,7 @@ stages:
         docker push $(ACR_LOGIN_SERVER)/backend-a-moath:latest
         docker push $(ACR_LOGIN_SERVER)/backend-b-moath:latest
       displayName: "Push Images to ACR"
+
 
 # =========================================================
 # DEV
