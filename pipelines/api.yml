@@ -12,9 +12,6 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
-# =========================================================
-# VARIABLES
-# =========================================================
 variables:
 - group: db-secrets
 
@@ -27,7 +24,6 @@ variables:
 - name: ACR_LOGIN_SERVER
   value: "acrmoath.azurecr.io"
 
-# ---------- SONARQUBE ----------
 - name: SONARQUBE_URL
   value: "http://20.64.246.3:9000"
 
@@ -37,10 +33,6 @@ variables:
 - name: SONARQUBE_PROJECT_NAME
   value: "moath-api"
 
-
-# =========================================================
-# BUILD + SECURITY STAGE
-# =========================================================
 stages:
 - stage: Build
   displayName: "SAST + Build + Container Scan + Push"
@@ -49,35 +41,29 @@ stages:
     steps:
     - checkout: self
 
-    # ---------- INSTALL SONAR-SCANNER CLI (ZIP, CORRECT x64) ----------
+    # ---------- INSTALL SONAR SCANNER (WORKING VERSION) ----------
     - script: |
         set -e
 
-        SCANNER_VERSION=6.2.1.4610
+        SCANNER_VERSION=5.0.1.3006
         FILE=sonar-scanner-$SCANNER_VERSION-linux-x64
 
-        echo "📥 Downloading SonarScanner $SCANNER_VERSION..."
+        echo "Downloading SonarScanner $SCANNER_VERSION…"
         curl -L -o scanner.zip \
           https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/$FILE.zip
 
-        echo "📦 File size:"
-        ls -lh scanner.zip
-
-        echo "🗜 Unzipping..."
+        echo "Unzipping…"
         unzip -q scanner.zip
 
-        echo "🚚 Renaming folder to sonar-scanner..."
         mv $FILE sonar-scanner
-
-        echo "⚙️ Making binary executable..."
         chmod +x sonar-scanner/bin/sonar-scanner
 
-        echo "🆗 Version check:"
+        echo "SonarScanner installed successfully:"
         sonar-scanner/bin/sonar-scanner --version
       displayName: "Install SonarScanner CLI"
 
 
-    # ---------- RUN SONARQUBE SCAN ----------
+    # ---------- RUN SONAR SCAN ----------
     - script: |
         set -e
 
@@ -87,22 +73,20 @@ stages:
           -Dsonar.host.url=$(SONARQUBE_URL) \
           -Dsonar.login=$(SONARQUBE_TOKEN) \
           -Dsonar.sources=backend-a,backend-b \
-          -Dsonar.java.binaries=. \
-          -Dsonar.branch.name=main
-      displayName: "Run SonarQube Analysis (CLI Mode)"
+          -Dsonar.java.binaries=.
+      displayName: "Run SonarQube Analysis"
       env:
         SONARQUBE_TOKEN: $(SONARQUBE_TOKEN)
 
-
     # ---------- LOGIN TO ACR ----------
     - task: AzureCLI@2
-      displayName: "Azure Login ACR"
       inputs:
         azureSubscription: $(AZURE_SERVICE_CONNECTION)
         scriptType: bash
         scriptLocation: inlineScript
         inlineScript: |
           az acr login --name $(ACR_NAME)
+      displayName: "Azure Login ACR"
 
     # ---------- BUILD DOCKER ----------
     - script: |
@@ -116,23 +100,13 @@ stages:
           | sh -s -- -b /usr/local/bin
       displayName: "Install Trivy"
 
-    # ---------- SCAN BACKEND A ----------
-    - script: |
-        trivy image \
-          --severity CRITICAL \
-          --exit-code 1 \
-          backend-a-local
-      displayName: "Trivy Scan Backend A (Fail on Critical)"
+    # ---------- SCAN IMAGES ----------
+    - script: trivy image --severity CRITICAL --exit-code 1 backend-a-local
+      displayName: "Scan Backend A"
+    - script: trivy image --severity CRITICAL --exit-code 1 backend-b-local
+      displayName: "Scan Backend B"
 
-    # ---------- SCAN BACKEND B ----------
-    - script: |
-        trivy image \
-          --severity CRITICAL \
-          --exit-code 1 \
-          backend-b-local
-      displayName: "Trivy Scan Backend B (Fail on Critical)"
-
-    # ---------- TAG + PUSH ----------
+    # ---------- PUSH ----------
     - script: |
         docker tag backend-a-local $(ACR_LOGIN_SERVER)/backend-a-moath:latest
         docker tag backend-b-local $(ACR_LOGIN_SERVER)/backend-b-moath:latest
@@ -140,6 +114,7 @@ stages:
         docker push $(ACR_LOGIN_SERVER)/backend-a-moath:latest
         docker push $(ACR_LOGIN_SERVER)/backend-b-moath:latest
       displayName: "Push Images to ACR"
+
 
 
 # =========================================================
