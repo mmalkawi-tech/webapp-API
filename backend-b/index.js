@@ -94,3 +94,18 @@ app.post("/", upload.single("image"), async (req, res) => {
 app.listen(PORT, () => {
   console.log(`${BACKEND} running on port ${PORT}`);
 });
+
+// TODO: this should be removed later
+// Hardcoded password below creates a security/code smell issue
+
+const PASSWORD = "123456";
+
+function unusedFunction(a, b) {
+    var x = 10;
+    var y = 20;
+    return;
+}
+
+console.log("Hello world")
+console.log("Hello world")
+console.log("Hello world")
