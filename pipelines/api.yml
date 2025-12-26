@@ -49,38 +49,36 @@ stages:
     steps:
     - checkout: self
 
-    # ---------- INSTALL SONAR-SCANNER CLI ----------
+        # ---------- INSTALL SONAR-SCANNER CLI ----------
     - script: |
         set -e
 
-        echo "Downloading Sonar Scanner CLI..."
-        curl -L -o sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli.zip
+        SCANNER_VERSION=6.2.1.4610
+        FILE=sonar-scanner-$SCANNER_VERSION-linux
+
+        echo "Downloading Sonar Scanner $SCANNER_VERSION ..."
+        curl -L -o scanner.zip \
+          https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/$FILE.zip
+
+        echo "Verifying file size..."
+        ls -lh scanner.zip
 
         echo "Unzipping..."
-        unzip -q sonar-scanner.zip
+        unzip -q scanner.zip
 
-        echo "Detecting scanner directory..."
-        SCANNER_DIR=$(find . -maxdepth 1 -type d -name "sonar-scanner*" | head -n 1)
-        echo "Scanner directory is: $SCANNER_DIR"
+        echo "Setting scanner path..."
+        mv $FILE sonar-scanner
+        chmod +x sonar-scanner/bin/sonar-scanner
 
-        echo "Make scanner executable..."
-        chmod +x $SCANNER_DIR/bin/sonar-scanner
-
-        echo "Add scanner to PATH..."
-        export PATH="$SCANNER_DIR/bin:$PATH"
-
-        echo "Verify sonar-scanner version..."
-        $SCANNER_DIR/bin/sonar-scanner --version
+        echo "Scanner version:"
+        sonar-scanner/bin/sonar-scanner --version
       displayName: "Install Sonar Scanner CLI"
 
     # ---------- RUN SONARQUBE SCAN ----------
     - script: |
         set -e
 
-        SCANNER_DIR=$(find . -maxdepth 1 -type d -name "sonar-scanner*" | head -n 1)
-        echo "Using scanner in $SCANNER_DIR"
-
-        $SCANNER_DIR/bin/sonar-scanner \
+        ./sonar-scanner/bin/sonar-scanner \
           -Dsonar.projectKey=$(SONARQUBE_PROJECT_KEY) \
           -Dsonar.projectName="$(SONARQUBE_PROJECT_NAME)" \
           -Dsonar.host.url=$(SONARQUBE_URL) \
@@ -91,6 +89,7 @@ stages:
       displayName: "Run SonarQube Analysis (CLI Mode)"
       env:
         SONARQUBE_TOKEN: $(SONARQUBE_TOKEN)
+
 
     # ---------- LOGIN TO ACR ----------
     - task: AzureCLI@2
