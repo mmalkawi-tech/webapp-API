@@ -51,9 +51,16 @@ stages:
 
     # ---------- INSTALL SONAR-SCANNER CLI ----------
     - script: |
-        wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-6.2.1.4610-linux.zip
-        unzip sonar-scanner-6.2.1.4610-linux.zip
-        mv sonar-scanner-6.2.1.4610-linux sonar-scanner
+        echo "Downloading Sonar Scanner CLI..."
+        curl -L -o sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli.zip
+
+        echo "Unzipping..."
+        unzip sonar-scanner.zip
+
+        echo "Renaming folder..."
+        mv sonar-scanner-* sonar-scanner
+
+        echo "Sonar Scanner installed"
       displayName: "Install Sonar Scanner CLI"
 
     # ---------- RUN SONARQUBE SCAN ----------
