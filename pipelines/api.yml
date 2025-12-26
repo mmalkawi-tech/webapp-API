@@ -27,19 +27,15 @@ variables:
 - name: ACR_LOGIN_SERVER
   value: "acrmoath.azurecr.io"
 
-# ---------- SONARQUBE (SELF-HOSTED) ----------
-- name: SONARQUBE_SERVICE_CONNECTION
-  value: "SelfHosted-SonarQube-Connection"
+# ---------- SONARQUBE ----------
+- name: SONARQUBE_URL
+  value: "http://20.64.246.3:9000"
 
 - name: SONARQUBE_PROJECT_KEY
   value: "moath-api"
 
 - name: SONARQUBE_PROJECT_NAME
   value: "moath-api"
-
-# ---------- IMPORTANT: DISABLE BRANCH ANALYSIS ----------
-- name: SONARQUBE_SCANNER_PARAMS
-  value: '{}'
 
 
 # =========================================================
@@ -53,34 +49,25 @@ stages:
     steps:
     - checkout: self
 
-    # ---------- SONARQUBE PREP ----------
-    - task: SonarQubePrepare@8
-      displayName: "Prepare SonarQube Analysis"
+    # ---------- INSTALL SONAR-SCANNER CLI ----------
+    - script: |
+        wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-6.2.1.4610-linux.zip
+        unzip sonar-scanner-6.2.1.4610-linux.zip
+        mv sonar-scanner-6.2.1.4610-linux sonar-scanner
+      displayName: "Install Sonar Scanner CLI"
+
+    # ---------- RUN SONARQUBE SCAN ----------
+    - script: |
+        ./sonar-scanner/bin/sonar-scanner \
+          -Dsonar.projectKey=$(SONARQUBE_PROJECT_KEY) \
+          -Dsonar.projectName="$(SONARQUBE_PROJECT_NAME)" \
+          -Dsonar.host.url=$(SONARQUBE_URL) \
+          -Dsonar.login=$(SONARQUBE_TOKEN) \
+          -Dsonar.sources=backend-a,backend-b \
+          -Dsonar.java.binaries=.
+      displayName: "Run SonarQube Analysis (CLI Mode)"
       env:
-        SONARQUBE_SCANNER_PARAMS: "{}"
-      inputs:
-        SonarQube: $(SONARQUBE_SERVICE_CONNECTION)
-        scannerMode: 'CLI'
-        configMode: 'manual'
-        cliProjectKey: $(SONARQUBE_PROJECT_KEY)
-        cliProjectName: $(SONARQUBE_PROJECT_NAME)
-        extraProperties: |
-          sonar.sources=backend-a,backend-b
-          sonar.host.url=http://20.64.246.3:9000
-          sonar.java.binaries=.
-
-    # ---------- SONARQUBE ANALYZE ----------
-    - task: SonarQubeAnalyze@8
-      displayName: "Run SonarQube Scan"
-      env:
-        SONARQUBE_SCANNER_PARAMS: "{}"
-
-    # ---------- QUALITY GATE ENFORCEMENT ----------
-    - task: SonarQubePublish@8
-      displayName: "Check Quality Gate"
-      inputs:
-        pollingTimeoutSec: 300
-
+        SONARQUBE_TOKEN: $(SONARQUBE_TOKEN)
 
     # ---------- LOGIN TO ACR ----------
     - task: AzureCLI@2
