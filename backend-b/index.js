@@ -109,3 +109,8 @@ function unusedFunction(a, b) {
 console.log("Hello world")
 console.log("Hello world")
 console.log("Hello world")
+
+// ❌ Hardcoded credentials - SECURITY VULNERABILITY
+const dbUser = "admin";
+const dbPassword = "SuperSecretPassword123";
+console.log("Connecting with password:", dbPassword);
