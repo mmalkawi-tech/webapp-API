@@ -49,21 +49,32 @@ stages:
     steps:
     - checkout: self
 
-          # ---------- INSTALL SONAR-SCANNER CLI (APT) ----------
+    # ---------- INSTALL SONAR-SCANNER CLI (ZIP, CORRECT x64) ----------
     - script: |
         set -e
 
-        echo "Updating apt repo…"
-        sudo apt-get update
+        SCANNER_VERSION=6.2.1.4610
+        FILE=sonar-scanner-$SCANNER_VERSION-linux-x64
 
-        echo "Installing SonarScanner CLI…"
-        sudo apt-get install -y sonar-scanner-cli
+        echo "📥 Downloading SonarScanner $SCANNER_VERSION..."
+        curl -L -o scanner.zip \
+          https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/$FILE.zip
 
-        echo "Checking version…"
-        sonar-scanner --version
-      displayName: "Install SonarScanner via apt"
+        echo "📦 File size:"
+        ls -lh scanner.zip
 
+        echo "🗜 Unzipping..."
+        unzip -q scanner.zip
 
+        echo "🚚 Renaming folder to sonar-scanner..."
+        mv $FILE sonar-scanner
+
+        echo "⚙️ Making binary executable..."
+        chmod +x sonar-scanner/bin/sonar-scanner
+
+        echo "🆗 Version check:"
+        sonar-scanner/bin/sonar-scanner --version
+      displayName: "Install SonarScanner CLI"
 
 
     # ---------- RUN SONARQUBE SCAN ----------
