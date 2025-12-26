@@ -61,15 +61,15 @@ stages:
 
         echo "Detecting scanner directory..."
         SCANNER_DIR=$(find . -maxdepth 1 -type d -name "sonar-scanner*" | head -n 1)
-        echo "Scanner dir is: $SCANNER_DIR"
+        echo "Scanner directory is: $SCANNER_DIR"
 
-        echo "Making executable..."
+        echo "Make scanner executable..."
         chmod +x $SCANNER_DIR/bin/sonar-scanner
 
-        echo "Adding to PATH..."
+        echo "Add scanner to PATH..."
         export PATH="$SCANNER_DIR/bin:$PATH"
 
-        echo "Verify installation..."
+        echo "Verify sonar-scanner version..."
         $SCANNER_DIR/bin/sonar-scanner --version
       displayName: "Install Sonar Scanner CLI"
 
@@ -78,7 +78,7 @@ stages:
         set -e
 
         SCANNER_DIR=$(find . -maxdepth 1 -type d -name "sonar-scanner*" | head -n 1)
-        echo "Using scanner from: $SCANNER_DIR"
+        echo "Using scanner in $SCANNER_DIR"
 
         $SCANNER_DIR/bin/sonar-scanner \
           -Dsonar.projectKey=$(SONARQUBE_PROJECT_KEY) \
@@ -86,7 +86,8 @@ stages:
           -Dsonar.host.url=$(SONARQUBE_URL) \
           -Dsonar.login=$(SONARQUBE_TOKEN) \
           -Dsonar.sources=backend-a,backend-b \
-          -Dsonar.java.binaries=.
+          -Dsonar.java.binaries=. \
+          -Dsonar.branch.name=main
       displayName: "Run SonarQube Analysis (CLI Mode)"
       env:
         SONARQUBE_TOKEN: $(SONARQUBE_TOKEN)
@@ -137,3 +138,79 @@ stages:
         docker push $(ACR_LOGIN_SERVER)/backend-a-moath:latest
         docker push $(ACR_LOGIN_SERVER)/backend-b-moath:latest
       displayName: "Push Images to ACR"
+
+
+# =========================================================
+# DEV STAGE
+# =========================================================
+- stage: Dev
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - deployment: DeployDev
+    environment: dev
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - task: KubectlInstaller@0
+            inputs:
+              kubectlVersion: "latest"
+
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az aks get-credentials -g rg-moath-dev -n aks-moath-dev --overwrite-existing
+                kubectl apply -k k8s/overlays/dev
+
+
+# =========================================================
+# QA STAGE
+# =========================================================
+- stage: QA
+  dependsOn: Dev
+  condition: succeeded()
+  jobs:
+  - deployment: DeployQA
+    environment: qa
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az aks get-credentials -g rg-moath-qa -n aks-moath-qa --overwrite-existing
+                kubectl apply -k k8s/overlays/qa
+
+
+# =========================================================
+# PROD STAGE
+# =========================================================
+- stage: Prod
+  dependsOn: QA
+  condition: succeeded()
+  jobs:
+  - deployment: DeployProd
+    environment: prod
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az aks get-credentials -g rg-moath-prod -n aks-moath-prod --overwrite-existing
+                kubectl apply -k k8s/overlays/prod
