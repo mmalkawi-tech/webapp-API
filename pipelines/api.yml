@@ -46,7 +46,7 @@ stages:
     steps:
     - checkout: self
 
-    # ---------- RUN SONARQUBE SCAN (Docker, Community Edition safe) ----------
+    # ---------- RUN SONARQUBE SCAN ----------
     - script: |
         docker run --rm \
           -e SONAR_HOST_URL=$(SONARQUBE_URL) \
@@ -56,7 +56,8 @@ stages:
           -Dsonar.projectKey=$(SONARQUBE_PROJECT_KEY) \
           -Dsonar.projectName="$(SONARQUBE_PROJECT_NAME)" \
           -Dsonar.sources=backend-a,backend-b \
-          -Dsonar.java.binaries=.
+          -Dsonar.java.binaries=. \
+          -Dsonar.qualitygate.wait=true
       displayName: "Run SonarQube Analysis (Docker Scanner)"
       env:
         SONARQUBE_TOKEN: $(SONARQUBE_TOKEN)
@@ -86,6 +87,7 @@ stages:
     # ---------- SCAN ----------
     - script: trivy image --severity CRITICAL --exit-code 1 backend-a-local
       displayName: "Scan Backend A"
+
     - script: trivy image --severity CRITICAL --exit-code 1 backend-b-local
       displayName: "Scan Backend B"
 
