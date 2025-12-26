@@ -29,13 +29,17 @@ variables:
 
 # ---------- SONARQUBE (SELF-HOSTED) ----------
 - name: SONARQUBE_SERVICE_CONNECTION
-  value: "SelfHosted-SonarQube-Connection"   # <-- name of service connection
+  value: "SelfHosted-SonarQube-Connection"
 
 - name: SONARQUBE_PROJECT_KEY
   value: "moath-api"
 
 - name: SONARQUBE_PROJECT_NAME
   value: "moath-api"
+
+# ---------- IMPORTANT: DISABLE BRANCH ANALYSIS ----------
+- name: SONARQUBE_SCANNER_PARAMS
+  value: '{}'
 
 
 # =========================================================
@@ -62,8 +66,6 @@ stages:
           sonar.sources=backend-a,backend-b
           sonar.host.url=http://20.64.246.3:9000
           sonar.java.binaries=.
-          sonar.branch.name=
-          sonar.branch.target=
 
     # ---------- SONARQUBE ANALYZE ----------
     - task: SonarQubeAnalyze@8
@@ -74,6 +76,7 @@ stages:
       displayName: "Check Quality Gate"
       inputs:
         pollingTimeoutSec: 300
+
 
     # ---------- LOGIN TO ACR ----------
     - task: AzureCLI@2
@@ -128,7 +131,7 @@ stages:
 # =========================================================
 - stage: Dev
   dependsOn: Build
-  condition: succeeded()    # only deploy if security passes
+  condition: succeeded()
   jobs:
   - deployment: DeployDev
     environment: dev
