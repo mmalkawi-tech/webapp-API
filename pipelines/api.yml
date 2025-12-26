@@ -56,6 +56,8 @@ stages:
     # ---------- SONARQUBE PREP ----------
     - task: SonarQubePrepare@8
       displayName: "Prepare SonarQube Analysis"
+      env:
+        SONARQUBE_SCANNER_PARAMS: "{}"
       inputs:
         SonarQube: $(SONARQUBE_SERVICE_CONNECTION)
         scannerMode: 'CLI'
@@ -70,6 +72,8 @@ stages:
     # ---------- SONARQUBE ANALYZE ----------
     - task: SonarQubeAnalyze@8
       displayName: "Run SonarQube Scan"
+      env:
+        SONARQUBE_SCANNER_PARAMS: "{}"
 
     # ---------- QUALITY GATE ENFORCEMENT ----------
     - task: SonarQubePublish@8
