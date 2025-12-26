@@ -84,11 +84,16 @@ stages:
           | sh -s -- -b /usr/local/bin
       displayName: "Install Trivy"
 
+    # ---------- DOWNLOAD TRIVY HTML TEMPLATE ----------
+    - script: |
+        curl -sSL -o html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
+      displayName: "Download Trivy HTML template"
+
     # ---------- TRIVY HTML REPORT - BACKEND A ----------
     - script: |
         trivy image \
           --format template \
-          --template "@contrib/html.tpl" \
+          --template "@html.tpl" \
           --output trivy-backend-a.html \
           backend-a-local
       displayName: "Generate Trivy HTML Report - Backend A"
@@ -97,7 +102,7 @@ stages:
     - script: |
         trivy image \
           --format template \
-          --template "@contrib/html.tpl" \
+          --template "@html.tpl" \
           --output trivy-backend-b.html \
           backend-b-local
       displayName: "Generate Trivy HTML Report - Backend B"
