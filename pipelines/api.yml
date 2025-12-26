@@ -49,18 +49,20 @@ stages:
     steps:
     - checkout: self
 
-        # ---------- INSTALL SONAR-SCANNER CLI (APT — RELIABLE) ----------
+          # ---------- INSTALL SONAR-SCANNER CLI (APT) ----------
     - script: |
         set -e
+
         echo "Updating apt repo…"
         sudo apt-get update
 
-        echo "Installing SonarScanner…"
-        sudo apt-get install -y sonar-scanner
+        echo "Installing SonarScanner CLI…"
+        sudo apt-get install -y sonar-scanner-cli
 
         echo "Checking version…"
         sonar-scanner --version
       displayName: "Install SonarScanner via apt"
+
 
 
 
