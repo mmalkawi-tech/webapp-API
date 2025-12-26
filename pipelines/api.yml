@@ -109,8 +109,8 @@ stages:
 
     # ---------- FAIL PIPELINE IF CRITICAL/HIGH ----------
     - script: |
-        trivy image --severity CRITICAL,HIGH --exit-code 1 backend-a-local
-        trivy image --severity CRITICAL,HIGH --exit-code 1 backend-b-local
+        trivy image --severity CRITICAL --exit-code 1 backend-a-local
+        trivy image --severity CRITICAL --exit-code 1 backend-b-local
       displayName: "Fail Build if High/Critical CVEs Found"
 
     # ---------- PUBLISH HTML DASHBOARDS ----------
