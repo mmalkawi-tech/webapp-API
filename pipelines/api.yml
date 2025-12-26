@@ -49,32 +49,38 @@ stages:
     steps:
     - checkout: self
 
-          # ---------- INSTALL SONAR-SCANNER CLI ----------
+            # ---------- INSTALL SONAR-SCANNER CLI ----------
     - script: |
         set -e
 
-        SCANNER_VERSION=6.2.1.4610
-        FILE=sonar-scanner-$SCANNER_VERSION-linux
+        echo "Fetching latest SonarScanner CLI download URL…"
+        LATEST_URL=$(curl -s https://api.github.com/repos/SonarSource/sonar-scanner-cli/releases/latest \
+          | grep browser_download_url \
+          | grep linux \
+          | cut -d '"' -f 4)
 
-        echo "Downloading Sonar Scanner $SCANNER_VERSION from GitHub..."
-        curl -L -o scanner.zip \
-          https://github.com/SonarSource/sonar-scanner-cli/releases/download/v$SCANNER_VERSION/$FILE.zip
+        echo "Latest release URL:"
+        echo "$LATEST_URL"
 
-        echo "Download complete. File size:"
-        ls -lh scanner.zip
+        echo "Downloading package..."
+        curl -L -o scanner.zip "$LATEST_URL"
 
         echo "Unzipping..."
         unzip -q scanner.zip
 
-        echo "Renaming folder..."
-        mv $FILE sonar-scanner
+        echo "Locate extracted folder..."
+        SCANNER_DIR=$(ls -d sonar-scanner-*)
+
+        echo "Renaming to sonar-scanner..."
+        mv "$SCANNER_DIR" sonar-scanner
 
         echo "Make scanner executable..."
         chmod +x sonar-scanner/bin/sonar-scanner
 
-        echo "Scanner version:"
+        echo "Validate installation..."
         sonar-scanner/bin/sonar-scanner --version
       displayName: "Install Sonar Scanner CLI"
+
 
 
     # ---------- RUN SONARQUBE SCAN ----------
