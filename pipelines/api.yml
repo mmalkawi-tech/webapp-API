@@ -24,6 +24,7 @@ variables:
 - name: ACR_LOGIN_SERVER
   value: "acrmoath.azurecr.io"
 
+# ---------- SONARQUBE ----------
 - name: SONARQUBE_URL
   value: "http://20.64.246.3:9000"
 
@@ -34,6 +35,10 @@ variables:
   value: "moath-api"
 
 stages:
+
+# =========================================================
+# BUILD + SAST + IMAGE SCAN
+# =========================================================
 - stage: Build
   displayName: "SAST + Build + Container Scan + Push"
   jobs:
@@ -41,29 +46,28 @@ stages:
     steps:
     - checkout: self
 
-    # ---------- INSTALL SONAR SCANNER (WORKING VERSION) ----------
+    # ---------- INSTALL SONAR SCANNER (WORKING SOURCE) ----------
     - script: |
         set -e
 
         SCANNER_VERSION=5.0.1.3006
         FILE=sonar-scanner-$SCANNER_VERSION-linux-x64
 
-        echo "Downloading SonarScanner $SCANNER_VERSION…"
+        echo "📥 Downloading SonarScanner $SCANNER_VERSION…"
         curl -L -o scanner.zip \
-          https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/$FILE.zip
+          https://get.sonarsource.com/sonar-scanner-cli/$FILE.zip
 
-        echo "Unzipping…"
+        echo "📦 Unzipping…"
         unzip -q scanner.zip
 
         mv $FILE sonar-scanner
         chmod +x sonar-scanner/bin/sonar-scanner
 
-        echo "SonarScanner installed successfully:"
+        echo "✅ Installed version:"
         sonar-scanner/bin/sonar-scanner --version
       displayName: "Install SonarScanner CLI"
 
-
-    # ---------- RUN SONAR SCAN ----------
+    # ---------- RUN SONARQUBE SCAN ----------
     - script: |
         set -e
 
@@ -80,13 +84,13 @@ stages:
 
     # ---------- LOGIN TO ACR ----------
     - task: AzureCLI@2
+      displayName: "Azure Login ACR"
       inputs:
         azureSubscription: $(AZURE_SERVICE_CONNECTION)
         scriptType: bash
         scriptLocation: inlineScript
         inlineScript: |
           az acr login --name $(ACR_NAME)
-      displayName: "Azure Login ACR"
 
     # ---------- BUILD DOCKER ----------
     - script: |
@@ -115,10 +119,8 @@ stages:
         docker push $(ACR_LOGIN_SERVER)/backend-b-moath:latest
       displayName: "Push Images to ACR"
 
-
-
 # =========================================================
-# DEV STAGE
+# DEV
 # =========================================================
 - stage: Dev
   dependsOn: Build
@@ -143,9 +145,8 @@ stages:
                 az aks get-credentials -g rg-moath-dev -n aks-moath-dev --overwrite-existing
                 kubectl apply -k k8s/overlays/dev
 
-
 # =========================================================
-# QA STAGE
+# QA
 # =========================================================
 - stage: QA
   dependsOn: Dev
@@ -167,9 +168,8 @@ stages:
                 az aks get-credentials -g rg-moath-qa -n aks-moath-qa --overwrite-existing
                 kubectl apply -k k8s/overlays/qa
 
-
 # =========================================================
-# PROD STAGE
+# PROD
 # =========================================================
 - stage: Prod
   dependsOn: QA
