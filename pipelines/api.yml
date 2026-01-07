@@ -107,11 +107,11 @@ stages:
           backend-b-local
       displayName: "Generate Trivy HTML Report - Backend B"
 
-    # ---------- FAIL PIPELINE IF CRITICAL/HIGH ----------
+    # ---------- FAIL PIPELINE IF CRITICAL ----------
     - script: |
         trivy image --severity CRITICAL --exit-code 1 backend-a-local
         trivy image --severity CRITICAL --exit-code 1 backend-b-local
-      displayName: "Fail Build if High/Critical CVEs Found"
+      displayName: "Fail Build if Critical CVEs Found"
 
     # ---------- PUBLISH HTML DASHBOARDS ----------
     - task: PublishBuildArtifacts@1
@@ -131,7 +131,7 @@ stages:
       displayName: "Push Images to ACR"
 
 # =========================================================
-# DEV
+# DEV DEPLOY
 # =========================================================
 - stage: Dev
   dependsOn: Build
@@ -154,10 +154,15 @@ stages:
               scriptLocation: inlineScript
               inlineScript: |
                 az aks get-credentials -g rg-moath-dev -n aks-moath-dev --overwrite-existing
+
+                # ----- ENSURE NAMESPACE EXISTS -----
+                kubectl apply -f k8s/namespaces/dev.yaml
+
+                # ----- DEPLOY -----
                 kubectl apply -k k8s/overlays/dev
 
 # =========================================================
-# QA
+# QA DEPLOY
 # =========================================================
 - stage: QA
   dependsOn: Dev
@@ -177,10 +182,15 @@ stages:
               scriptLocation: inlineScript
               inlineScript: |
                 az aks get-credentials -g rg-moath-qa -n aks-moath-qa --overwrite-existing
+
+                # ----- ENSURE NAMESPACE EXISTS -----
+                kubectl apply -f k8s/namespaces/qa.yaml
+
+                # ----- DEPLOY -----
                 kubectl apply -k k8s/overlays/qa
 
 # =========================================================
-# PROD
+# PROD DEPLOY
 # =========================================================
 - stage: Prod
   dependsOn: QA
@@ -200,4 +210,9 @@ stages:
               scriptLocation: inlineScript
               inlineScript: |
                 az aks get-credentials -g rg-moath-prod -n aks-moath-prod --overwrite-existing
+
+                # ----- ENSURE NAMESPACE EXISTS -----
+                kubectl apply -f k8s/namespaces/prod.yaml
+
+                # ----- DEPLOY -----
                 kubectl apply -k k8s/overlays/prod
