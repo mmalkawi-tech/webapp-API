@@ -84,48 +84,32 @@ stages:
           | sh -s -- -b /usr/local/bin
       displayName: "Install Trivy"
 
-    # ---------- DOWNLOAD TRIVY HTML TEMPLATE ----------
+    # ---------- REPORTS ----------
     - script: |
         curl -sSL -o html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
       displayName: "Download Trivy HTML template"
 
-    # ---------- TRIVY HTML REPORT - BACKEND A ----------
     - script: |
-        trivy image \
-          --format template \
-          --template "@html.tpl" \
-          --output trivy-backend-a.html \
-          backend-a-local
-      displayName: "Generate Trivy HTML Report - Backend A"
+        trivy image --format template --template "@html.tpl" --output trivy-backend-a.html backend-a-local
+        trivy image --format template --template "@html.tpl" --output trivy-backend-b.html backend-b-local
+      displayName: "Generate Trivy HTML Reports"
 
-    # ---------- TRIVY HTML REPORT - BACKEND B ----------
-    - script: |
-        trivy image \
-          --format template \
-          --template "@html.tpl" \
-          --output trivy-backend-b.html \
-          backend-b-local
-      displayName: "Generate Trivy HTML Report - Backend B"
-
-    # ---------- FAIL PIPELINE IF CRITICAL ----------
     - script: |
         trivy image --severity CRITICAL --exit-code 1 backend-a-local
         trivy image --severity CRITICAL --exit-code 1 backend-b-local
       displayName: "Fail Build if Critical CVEs Found"
 
-    # ---------- PUBLISH HTML DASHBOARDS ----------
     - task: PublishBuildArtifacts@1
-      displayName: "Publish Trivy HTML Reports"
       inputs:
         PathtoPublish: "$(System.DefaultWorkingDirectory)"
         ArtifactName: "trivy-reports"
         publishLocation: "Container"
+      displayName: "Publish Trivy HTML Reports"
 
     # ---------- PUSH IMAGES ----------
     - script: |
         docker tag backend-a-local $(ACR_LOGIN_SERVER)/backend-a-moath:latest
         docker tag backend-b-local $(ACR_LOGIN_SERVER)/backend-b-moath:latest
-
         docker push $(ACR_LOGIN_SERVER)/backend-a-moath:latest
         docker push $(ACR_LOGIN_SERVER)/backend-b-moath:latest
       displayName: "Push Images to ACR"
@@ -135,7 +119,6 @@ stages:
 # =========================================================
 - stage: Dev
   dependsOn: Build
-  condition: succeeded()
   jobs:
   - deployment: DeployDev
     environment: dev
@@ -144,9 +127,6 @@ stages:
         deploy:
           steps:
           - checkout: self
-          - task: KubectlInstaller@0
-            inputs:
-              kubectlVersion: "latest"
           - task: AzureCLI@2
             inputs:
               azureSubscription: $(AZURE_SERVICE_CONNECTION)
@@ -155,8 +135,13 @@ stages:
               inlineScript: |
                 az aks get-credentials -g rg-moath-dev -n aks-moath-dev --overwrite-existing
 
-                # ----- ENSURE NAMESPACE EXISTS -----
+                # ----- NAMESPACE -----
                 kubectl apply -f k8s/namespaces/dev.yaml
+
+                # ----- SECRET FROM PIPELINE VARIABLE -----
+                kubectl create secret generic postgres-secret-moath \
+                  --from-literal=POSTGRES_PASSWORD=$(DB_PASSWORD_DEV) \
+                  -n moath-webapp-dev --dry-run=client -o yaml | kubectl apply -f -
 
                 # ----- DEPLOY -----
                 kubectl apply -k k8s/overlays/dev
@@ -166,7 +151,6 @@ stages:
 # =========================================================
 - stage: QA
   dependsOn: Dev
-  condition: succeeded()
   jobs:
   - deployment: DeployQA
     environment: qa
@@ -183,10 +167,12 @@ stages:
               inlineScript: |
                 az aks get-credentials -g rg-moath-qa -n aks-moath-qa --overwrite-existing
 
-                # ----- ENSURE NAMESPACE EXISTS -----
                 kubectl apply -f k8s/namespaces/qa.yaml
 
-                # ----- DEPLOY -----
+                kubectl create secret generic postgres-secret-moath \
+                  --from-literal=POSTGRES_PASSWORD=$(DB_PASSWORD_QA) \
+                  -n moath-webapp-qa --dry-run=client -o yaml | kubectl apply -f -
+
                 kubectl apply -k k8s/overlays/qa
 
 # =========================================================
@@ -194,7 +180,6 @@ stages:
 # =========================================================
 - stage: Prod
   dependsOn: QA
-  condition: succeeded()
   jobs:
   - deployment: DeployProd
     environment: prod
@@ -211,8 +196,10 @@ stages:
               inlineScript: |
                 az aks get-credentials -g rg-moath-prod -n aks-moath-prod --overwrite-existing
 
-                # ----- ENSURE NAMESPACE EXISTS -----
                 kubectl apply -f k8s/namespaces/prod.yaml
 
-                # ----- DEPLOY -----
+                kubectl create secret generic postgres-secret-moath \
+                  --from-literal=POSTGRES_PASSWORD=$(DB_PASSWORD_PROD) \
+                  -n moath-webapp-prod --dry-run=client -o yaml | kubectl apply -f -
+
                 kubectl apply -k k8s/overlays/prod
