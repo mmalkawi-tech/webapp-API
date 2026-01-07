@@ -4,22 +4,22 @@ metadata:
   name: moath-webapp-ingress
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: nginx
   rules:
   - http:
       paths:
-      - path: /api/a/?(.*)
-        pathType: Prefix
+      - path: /api/a(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: backend-a-moath
             port:
               number: 80
 
-      - path: /api/b/?(.*)
-        pathType: Prefix
+      - path: /api/b(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: backend-b-moath
