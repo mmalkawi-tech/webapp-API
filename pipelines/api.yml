@@ -46,7 +46,6 @@ stages:
     steps:
     - checkout: self
 
-    # ---------- RUN SONARQUBE SCAN ----------
     - script: |
         docker run --rm \
           -e SONAR_HOST_URL=$(SONARQUBE_URL) \
@@ -56,13 +55,11 @@ stages:
           -Dsonar.projectKey=$(SONARQUBE_PROJECT_KEY) \
           -Dsonar.projectName="$(SONARQUBE_PROJECT_NAME)" \
           -Dsonar.sources=backend-a,backend-b \
-          -Dsonar.java.binaries=. \
           -Dsonar.qualitygate.wait=true
       displayName: "Run SonarQube Analysis (Docker Scanner)"
       env:
         SONARQUBE_TOKEN: $(SONARQUBE_TOKEN)
 
-    # ---------- LOGIN TO ACR ----------
     - task: AzureCLI@2
       displayName: "Azure Login ACR"
       inputs:
@@ -72,41 +69,21 @@ stages:
         inlineScript: |
           az acr login --name $(ACR_NAME)
 
-    # ---------- BUILD DOCKER ----------
     - script: |
         docker build -t backend-a-local ./backend-a
         docker build -t backend-b-local ./backend-b
       displayName: "Build Docker Images"
 
-    # ---------- INSTALL TRIVY ----------
     - script: |
         curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
           | sh -s -- -b /usr/local/bin
       displayName: "Install Trivy"
-
-    # ---------- REPORTS ----------
-    - script: |
-        curl -sSL -o html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
-      displayName: "Download Trivy HTML template"
-
-    - script: |
-        trivy image --format template --template "@html.tpl" --output trivy-backend-a.html backend-a-local
-        trivy image --format template --template "@html.tpl" --output trivy-backend-b.html backend-b-local
-      displayName: "Generate Trivy HTML Reports"
 
     - script: |
         trivy image --severity CRITICAL --exit-code 1 backend-a-local
         trivy image --severity CRITICAL --exit-code 1 backend-b-local
       displayName: "Fail Build if Critical CVEs Found"
 
-    - task: PublishBuildArtifacts@1
-      inputs:
-        PathtoPublish: "$(System.DefaultWorkingDirectory)"
-        ArtifactName: "trivy-reports"
-        publishLocation: "Container"
-      displayName: "Publish Trivy HTML Reports"
-
-    # ---------- PUSH IMAGES ----------
     - script: |
         docker tag backend-a-local $(ACR_LOGIN_SERVER)/backend-a-moath:latest
         docker tag backend-b-local $(ACR_LOGIN_SERVER)/backend-b-moath:latest
@@ -115,7 +92,14 @@ stages:
       displayName: "Push Images to ACR"
 
 # =========================================================
-# DEV DEPLOY
+# COMMON INGRESS INSTALL FUNCTION
+# =========================================================
+# (runs in every environment)
+
+- template: none
+
+# =========================================================
+# DEV
 # =========================================================
 - stage: Dev
   dependsOn: Build
@@ -128,26 +112,42 @@ stages:
           steps:
           - checkout: self
           - task: AzureCLI@2
+            displayName: "Deploy DEV"
             inputs:
               azureSubscription: $(AZURE_SERVICE_CONNECTION)
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
+
                 az aks get-credentials -g rg-moath-dev -n aks-moath-dev --overwrite-existing
 
-                # ----- NAMESPACE -----
+                curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+
+                kubectl create ns ingress-nginx --dry-run=client -o yaml | kubectl apply -f -
+
+                helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+                helm repo update
+
+                helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+                  --namespace ingress-nginx
+
+                kubectl wait --namespace ingress-nginx \
+                  --for=condition=ready pod \
+                  --selector=app.kubernetes.io/component=controller \
+                  --timeout=300s
+
                 kubectl apply -f k8s/namespaces/dev.yaml
 
-                # ----- SECRET FROM PIPELINE VARIABLE -----
                 kubectl create secret generic postgres-secret-moath \
                   --from-literal=POSTGRES_PASSWORD=$(DB_PASSWORD_DEV) \
                   -n moath-webapp-dev --dry-run=client -o yaml | kubectl apply -f -
 
-                # ----- DEPLOY -----
                 kubectl apply -k k8s/overlays/dev
 
+                kubectl get ingress -n moath-webapp-dev
+
 # =========================================================
-# QA DEPLOY
+# QA
 # =========================================================
 - stage: QA
   dependsOn: Dev
@@ -160,12 +160,29 @@ stages:
           steps:
           - checkout: self
           - task: AzureCLI@2
+            displayName: "Deploy QA"
             inputs:
               azureSubscription: $(AZURE_SERVICE_CONNECTION)
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
+
                 az aks get-credentials -g rg-moath-qa -n aks-moath-qa --overwrite-existing
+
+                curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+
+                kubectl create ns ingress-nginx --dry-run=client -o yaml | kubectl apply -f -
+
+                helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+                helm repo update
+
+                helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+                  --namespace ingress-nginx
+
+                kubectl wait --namespace ingress-nginx \
+                  --for=condition=ready pod \
+                  --selector=app.kubernetes.io/component=controller \
+                  --timeout=300s
 
                 kubectl apply -f k8s/namespaces/qa.yaml
 
@@ -175,8 +192,10 @@ stages:
 
                 kubectl apply -k k8s/overlays/qa
 
+                kubectl get ingress -n moath-webapp-qa
+
 # =========================================================
-# PROD DEPLOY
+# PROD
 # =========================================================
 - stage: Prod
   dependsOn: QA
@@ -189,12 +208,29 @@ stages:
           steps:
           - checkout: self
           - task: AzureCLI@2
+            displayName: "Deploy PROD"
             inputs:
               azureSubscription: $(AZURE_SERVICE_CONNECTION)
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
+
                 az aks get-credentials -g rg-moath-prod -n aks-moath-prod --overwrite-existing
+
+                curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+
+                kubectl create ns ingress-nginx --dry-run=client -o yaml | kubectl apply -f -
+
+                helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+                helm repo update
+
+                helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+                  --namespace ingress-nginx
+
+                kubectl wait --namespace ingress-nginx \
+                  --for=condition=ready pod \
+                  --selector=app.kubernetes.io/component=controller \
+                  --timeout=300s
 
                 kubectl apply -f k8s/namespaces/prod.yaml
 
@@ -203,3 +239,5 @@ stages:
                   -n moath-webapp-prod --dry-run=client -o yaml | kubectl apply -f -
 
                 kubectl apply -k k8s/overlays/prod
+
+                kubectl get ingress -n moath-webapp-prod
