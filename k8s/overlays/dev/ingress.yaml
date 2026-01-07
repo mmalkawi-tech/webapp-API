@@ -11,7 +11,7 @@ spec:
   - http:
       paths:
       - path: /api/a(/|$)(.*)
-        pathType: ImplementationSpecific
+        pathType: Prefix
         backend:
           service:
             name: backend-a-moath
@@ -19,7 +19,7 @@ spec:
               number: 80
 
       - path: /api/b(/|$)(.*)
-        pathType: ImplementationSpecific
+        pathType: Prefix
         backend:
           service:
             name: backend-b-moath

@@ -141,7 +141,14 @@ stages:
 
                 kubectl apply -k k8s/overlays/dev
 
+                echo "Waiting for Ingress IP..."
                 kubectl get ingress -n moath-webapp-dev
+
+                INGRESS_IP=$(kubectl get service ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                echo "=========================================="
+                echo "DEV Ingress URL: http://$INGRESS_IP/api/a"
+                echo "DEV Ingress URL: http://$INGRESS_IP/api/b"
+                echo "=========================================="
 
 # =========================================================
 # QA
@@ -189,7 +196,14 @@ stages:
 
                 kubectl apply -k k8s/overlays/qa
 
+                echo "Waiting for Ingress IP..."
                 kubectl get ingress -n moath-webapp-qa
+
+                INGRESS_IP=$(kubectl get service ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                echo "=========================================="
+                echo "QA Ingress URL: http://$INGRESS_IP/api/a"
+                echo "QA Ingress URL: http://$INGRESS_IP/api/b"
+                echo "=========================================="
 
 # =========================================================
 # PROD
@@ -237,4 +251,11 @@ stages:
 
                 kubectl apply -k k8s/overlays/prod
 
+                echo "Waiting for Ingress IP..."
                 kubectl get ingress -n moath-webapp-prod
+
+                INGRESS_IP=$(kubectl get service ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                echo "=========================================="
+                echo "PROD Ingress URL: http://$INGRESS_IP/api/a"
+                echo "PROD Ingress URL: http://$INGRESS_IP/api/b"
+                echo "=========================================="
