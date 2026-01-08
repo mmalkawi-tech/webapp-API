@@ -212,6 +212,11 @@ stages:
 
                 kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
 
+                # Deploy ArgoCD Applications for GitOps
+                kubectl apply -f k8s/argocd/application-dev.yaml
+                kubectl apply -f k8s/argocd/application-qa.yaml
+                kubectl apply -f k8s/argocd/application-prod.yaml
+
                 echo "Waiting for Ingress IP..."
                 kubectl get ingress -n moath-webapp-dev
 
@@ -316,6 +321,11 @@ stages:
 
                 kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
 
+                # Deploy ArgoCD Applications for GitOps
+                kubectl apply -f k8s/argocd/application-dev.yaml
+                kubectl apply -f k8s/argocd/application-qa.yaml
+                kubectl apply -f k8s/argocd/application-prod.yaml
+
                 echo "Waiting for Ingress IP..."
                 kubectl get ingress -n moath-webapp-qa
 
@@ -419,6 +429,11 @@ stages:
                   --timeout=300s
 
                 kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
+
+                # Deploy ArgoCD Applications for GitOps
+                kubectl apply -f k8s/argocd/application-dev.yaml
+                kubectl apply -f k8s/argocd/application-qa.yaml
+                kubectl apply -f k8s/argocd/application-prod.yaml
 
                 echo "Waiting for Ingress IP..."
                 kubectl get ingress -n moath-webapp-prod
