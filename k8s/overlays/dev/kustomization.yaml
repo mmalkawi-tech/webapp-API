@@ -15,6 +15,7 @@ configMapGenerator:
 
 secretGenerator:
   - name: postgres-secret-moath
+    behavior: replace
     literals:
       - POSTGRES_PASSWORD=YourRealPasswordHere
 
