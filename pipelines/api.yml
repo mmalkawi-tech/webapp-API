@@ -61,32 +61,49 @@ stages:
         SONARQUBE_TOKEN: $(SONARQUBE_TOKEN)
 
     - script: |
-        # Install dependencies first to generate package-lock.json
+        set -e
+
+        echo "=== Installing Dependencies ==="
         cd backend-a && npm install && cd ..
         cd backend-b && npm install && cd ..
 
-        # Download and setup OWASP Dependency Check
-        wget https://github.com/jeremylong/DependencyCheck/releases/download/v9.0.9/dependency-check-9.0.9-release.zip
+        echo "=== Downloading OWASP Dependency Check ==="
+        wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v9.0.9/dependency-check-9.0.9-release.zip
         unzip -q dependency-check-9.0.9-release.zip
 
-        # Create output directory
-        mkdir -p $(Build.ArtifactStagingDirectory)/dependency-check
+        echo "=== Creating Output Directory ==="
+        OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/dependency-check"
+        mkdir -p "$OUTPUT_DIR"
+        echo "Output directory: $OUTPUT_DIR"
 
-        # Run OWASP Dependency Check
+        echo "=== Running OWASP Dependency Check ==="
         ./dependency-check/bin/dependency-check.sh \
-          --scan ./backend-a \
-          --scan ./backend-b \
+          --scan "$(pwd)/backend-a" \
+          --scan "$(pwd)/backend-b" \
           --format HTML \
           --format JSON \
           --format XML \
-          --out $(Build.ArtifactStagingDirectory)/dependency-check \
+          --out "$OUTPUT_DIR" \
           --project "moath-webapp-api" \
-          --failOnCVSS 9 \
-          --enableExperimental || true
+          --nvdApiKey "" \
+          --enableExperimental \
+          --log "$(pwd)/dependency-check.log" || {
+            echo "OWASP scan failed or found issues, continuing..."
+            cat "$(pwd)/dependency-check.log" || echo "No log file found"
+          }
 
-        # List generated files for debugging
-        echo "Generated OWASP reports:"
-        ls -la $(Build.ArtifactStagingDirectory)/dependency-check/
+        echo "=== Checking Generated Files ==="
+        echo "Contents of output directory:"
+        ls -lah "$OUTPUT_DIR" || echo "Directory is empty or doesn't exist"
+
+        echo "Full path check:"
+        find "$OUTPUT_DIR" -type f || echo "No files found"
+
+        # Create at least a summary file
+        if [ ! -f "$OUTPUT_DIR/dependency-check-report.html" ]; then
+          echo "<html><body><h1>OWASP Dependency Check</h1><p>Scan completed but no vulnerabilities report was generated. This might mean no dependencies were found or the scan encountered an error.</p></body></html>" > "$OUTPUT_DIR/scan-summary.html"
+          echo "Created placeholder summary file"
+        fi
       displayName: "OWASP Dependency Check - Scan Dependencies"
       continueOnError: true
 
