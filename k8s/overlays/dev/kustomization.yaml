@@ -13,12 +13,6 @@ configMapGenerator:
       - DB_NAME=webappdb-moath-dev
       - DB_USER=pgadmin
 
-secretGenerator:
-  - name: postgres-secret-moath
-    behavior: replace
-    literals:
-      - POSTGRES_PASSWORD=YourRealPasswordHere
-
 images:
   - name: acrmoath.azurecr.io/backend-a
     newTag: latest
