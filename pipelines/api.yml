@@ -60,6 +60,38 @@ stages:
       env:
         SONARQUBE_TOKEN: $(SONARQUBE_TOKEN)
 
+    - script: |
+        wget https://github.com/jeremylong/DependencyCheck/releases/download/v9.0.9/dependency-check-9.0.9-release.zip
+        unzip dependency-check-9.0.9-release.zip
+        ./dependency-check/bin/dependency-check.sh \
+          --scan ./backend-a/package.json \
+          --scan ./backend-b/package.json \
+          --format HTML \
+          --format JSON \
+          --out $(Build.ArtifactStagingDirectory)/dependency-check \
+          --failOnCVSS 9 \
+          --suppression ./dependency-check-suppressions.xml || true
+      displayName: "OWASP Dependency Check - Scan Dependencies"
+      continueOnError: false
+
+    - script: |
+        if [ -f "$(Build.ArtifactStagingDirectory)/dependency-check/dependency-check-report.json" ]; then
+          CRITICAL_COUNT=$(cat $(Build.ArtifactStagingDirectory)/dependency-check/dependency-check-report.json | grep -o '"severity":"CRITICAL"' | wc -l)
+          echo "Critical vulnerabilities found: $CRITICAL_COUNT"
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "##vso[task.logissue type=error]CRITICAL vulnerabilities found in dependencies!"
+            exit 1
+          fi
+        fi
+      displayName: "Fail Build if Critical Vulnerabilities Found"
+
+    - task: PublishBuildArtifacts@1
+      condition: always()
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/dependency-check'
+        ArtifactName: 'dependency-check-reports'
+      displayName: "Publish OWASP Dependency Check Reports"
+
     - task: AzureCLI@2
       displayName: "Azure Login ACR"
       inputs:
@@ -141,13 +173,62 @@ stages:
 
                 kubectl apply -k k8s/overlays/dev
 
+                # ========================================
+                # Install Prometheus & Grafana
+                # ========================================
+                kubectl create ns monitoring --dry-run=client -o yaml | kubectl apply -f -
+
+                helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+                helm repo add grafana https://grafana.github.io/helm-charts
+                helm repo update
+
+                helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+                  --namespace monitoring \
+                  --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+                  --set grafana.adminPassword=admin123 \
+                  --set grafana.service.type=LoadBalancer
+
+                # ========================================
+                # Install Loki
+                # ========================================
+                helm upgrade --install loki grafana/loki-stack \
+                  --namespace monitoring \
+                  --set grafana.enabled=false \
+                  --set prometheus.enabled=false \
+                  --set loki.persistence.enabled=true \
+                  --set loki.persistence.size=10Gi
+
+                # ========================================
+                # Install ArgoCD
+                # ========================================
+                kubectl create ns argocd --dry-run=client -o yaml | kubectl apply -f -
+
+                kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+                kubectl wait --namespace argocd \
+                  --for=condition=ready pod \
+                  --selector=app.kubernetes.io/name=argocd-server \
+                  --timeout=300s
+
+                kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
+
                 echo "Waiting for Ingress IP..."
                 kubectl get ingress -n moath-webapp-dev
 
                 INGRESS_IP=$(kubectl get service ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                GRAFANA_IP=$(kubectl get service prometheus-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                ARGOCD_IP=$(kubectl get service argocd-server -n argocd -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
+
                 echo "=========================================="
                 echo "DEV Ingress URL: http://$INGRESS_IP/api/a"
                 echo "DEV Ingress URL: http://$INGRESS_IP/api/b"
+                echo "=========================================="
+                echo "Grafana URL: http://$GRAFANA_IP"
+                echo "Grafana Login: admin / admin123"
+                echo "=========================================="
+                echo "ArgoCD URL: https://$ARGOCD_IP"
+                echo "ArgoCD Login: admin / $ARGOCD_PASSWORD"
                 echo "=========================================="
 
 # =========================================================
@@ -196,13 +277,62 @@ stages:
 
                 kubectl apply -k k8s/overlays/qa
 
+                # ========================================
+                # Install Prometheus & Grafana
+                # ========================================
+                kubectl create ns monitoring --dry-run=client -o yaml | kubectl apply -f -
+
+                helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+                helm repo add grafana https://grafana.github.io/helm-charts
+                helm repo update
+
+                helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+                  --namespace monitoring \
+                  --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+                  --set grafana.adminPassword=admin123 \
+                  --set grafana.service.type=LoadBalancer
+
+                # ========================================
+                # Install Loki
+                # ========================================
+                helm upgrade --install loki grafana/loki-stack \
+                  --namespace monitoring \
+                  --set grafana.enabled=false \
+                  --set prometheus.enabled=false \
+                  --set loki.persistence.enabled=true \
+                  --set loki.persistence.size=10Gi
+
+                # ========================================
+                # Install ArgoCD
+                # ========================================
+                kubectl create ns argocd --dry-run=client -o yaml | kubectl apply -f -
+
+                kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+                kubectl wait --namespace argocd \
+                  --for=condition=ready pod \
+                  --selector=app.kubernetes.io/name=argocd-server \
+                  --timeout=300s
+
+                kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
+
                 echo "Waiting for Ingress IP..."
                 kubectl get ingress -n moath-webapp-qa
 
                 INGRESS_IP=$(kubectl get service ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                GRAFANA_IP=$(kubectl get service prometheus-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                ARGOCD_IP=$(kubectl get service argocd-server -n argocd -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
+
                 echo "=========================================="
                 echo "QA Ingress URL: http://$INGRESS_IP/api/a"
                 echo "QA Ingress URL: http://$INGRESS_IP/api/b"
+                echo "=========================================="
+                echo "Grafana URL: http://$GRAFANA_IP"
+                echo "Grafana Login: admin / admin123"
+                echo "=========================================="
+                echo "ArgoCD URL: https://$ARGOCD_IP"
+                echo "ArgoCD Login: admin / $ARGOCD_PASSWORD"
                 echo "=========================================="
 
 # =========================================================
@@ -251,11 +381,60 @@ stages:
 
                 kubectl apply -k k8s/overlays/prod
 
+                # ========================================
+                # Install Prometheus & Grafana
+                # ========================================
+                kubectl create ns monitoring --dry-run=client -o yaml | kubectl apply -f -
+
+                helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+                helm repo add grafana https://grafana.github.io/helm-charts
+                helm repo update
+
+                helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+                  --namespace monitoring \
+                  --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+                  --set grafana.adminPassword=admin123 \
+                  --set grafana.service.type=LoadBalancer
+
+                # ========================================
+                # Install Loki
+                # ========================================
+                helm upgrade --install loki grafana/loki-stack \
+                  --namespace monitoring \
+                  --set grafana.enabled=false \
+                  --set prometheus.enabled=false \
+                  --set loki.persistence.enabled=true \
+                  --set loki.persistence.size=10Gi
+
+                # ========================================
+                # Install ArgoCD
+                # ========================================
+                kubectl create ns argocd --dry-run=client -o yaml | kubectl apply -f -
+
+                kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+                kubectl wait --namespace argocd \
+                  --for=condition=ready pod \
+                  --selector=app.kubernetes.io/name=argocd-server \
+                  --timeout=300s
+
+                kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
+
                 echo "Waiting for Ingress IP..."
                 kubectl get ingress -n moath-webapp-prod
 
                 INGRESS_IP=$(kubectl get service ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                GRAFANA_IP=$(kubectl get service prometheus-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                ARGOCD_IP=$(kubectl get service argocd-server -n argocd -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
+
                 echo "=========================================="
                 echo "PROD Ingress URL: http://$INGRESS_IP/api/a"
                 echo "PROD Ingress URL: http://$INGRESS_IP/api/b"
+                echo "=========================================="
+                echo "Grafana URL: http://$GRAFANA_IP"
+                echo "Grafana Login: admin / admin123"
+                echo "=========================================="
+                echo "ArgoCD URL: https://$ARGOCD_IP"
+                echo "ArgoCD Login: admin / $ARGOCD_PASSWORD"
                 echo "=========================================="
