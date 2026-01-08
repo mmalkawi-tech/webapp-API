@@ -10,7 +10,7 @@ spec:
   rules:
   - http:
       paths:
-      - path: /api/a(/|$)(.*)
+      - path: /api/dev/a(/|$)(.*)
         pathType: ImplementationSpecific
         backend:
           service:
@@ -18,7 +18,7 @@ spec:
             port:
               number: 80
 
-      - path: /api/b(/|$)(.*)
+      - path: /api/dev/b(/|$)(.*)
         pathType: ImplementationSpecific
         backend:
           service:

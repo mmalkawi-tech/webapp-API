@@ -10,14 +10,14 @@ spec:
   rules:
   - http:
       paths:
-      - path: /api/a(/|$)(.*)
+      - path: /api/qa/a(/|$)(.*)
         pathType: ImplementationSpecific
         backend:
           service:
             name: backend-a-moath
             port:
               number: 80
-      - path: /api/b(/|$)(.*)
+      - path: /api/qa/b(/|$)(.*)
         pathType: ImplementationSpecific
         backend:
           service:
