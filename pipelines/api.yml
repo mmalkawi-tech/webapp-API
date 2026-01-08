@@ -178,6 +178,29 @@ stages:
                 # ========================================
                 kubectl create ns monitoring --dry-run=client -o yaml | kubectl apply -f -
 
+                # Ensure NSG rules allow HTTP/HTTPS traffic (idempotent)
+                az network nsg rule create \
+                  --resource-group MC_rg-moath-dev_aks-moath-dev_westus2 \
+                  --nsg-name aks-agentpool-72219259-nsg \
+                  --name Allow-HTTP-Inbound \
+                  --priority 1000 \
+                  --source-address-prefixes '*' \
+                  --destination-port-ranges 80 \
+                  --access Allow \
+                  --protocol Tcp \
+                  --direction Inbound 2>/dev/null || echo "NSG rule already exists"
+
+                az network nsg rule create \
+                  --resource-group MC_rg-moath-dev_aks-moath-dev_westus2 \
+                  --nsg-name aks-agentpool-72219259-nsg \
+                  --name Allow-HTTPS-Inbound \
+                  --priority 1001 \
+                  --source-address-prefixes '*' \
+                  --destination-port-ranges 443 \
+                  --access Allow \
+                  --protocol Tcp \
+                  --direction Inbound 2>/dev/null || echo "NSG rule already exists"
+
                 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
                 helm repo add grafana https://grafana.github.io/helm-charts
                 helm repo update
@@ -186,7 +209,18 @@ stages:
                   --namespace monitoring \
                   --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
                   --set grafana.adminPassword=admin123 \
-                  --set grafana.service.type=LoadBalancer
+                  --set grafana.service.type=LoadBalancer \
+                  --set grafana.service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-internal"=false
+
+                # Deploy ServiceMonitors for backend pods
+                kubectl apply -f k8s/monitoring/servicemonitor.yaml -n moath-webapp-dev || true
+
+                # Deploy Grafana dashboards
+                kubectl apply -f k8s/monitoring/grafana-dashboard.yaml || true
+
+                # Fix Grafana LoadBalancer service configuration
+                kubectl annotate service prometheus-grafana -n monitoring service.beta.kubernetes.io/azure-load-balancer-internal=false --overwrite || true
+                kubectl annotate service prometheus-grafana -n monitoring service.beta.kubernetes.io/azure-allowed-ip-ranges="" --overwrite || true
 
                 # ========================================
                 # Install Loki
@@ -287,6 +321,29 @@ stages:
                 # ========================================
                 kubectl create ns monitoring --dry-run=client -o yaml | kubectl apply -f -
 
+                # Ensure NSG rules allow HTTP/HTTPS traffic (idempotent)
+                az network nsg rule create \
+                  --resource-group MC_rg-moath-qa_aks-moath-qa_westus2 \
+                  --nsg-name aks-agentpool-25353439-nsg \
+                  --name Allow-HTTP-Inbound \
+                  --priority 1000 \
+                  --source-address-prefixes '*' \
+                  --destination-port-ranges 80 \
+                  --access Allow \
+                  --protocol Tcp \
+                  --direction Inbound 2>/dev/null || echo "NSG rule already exists"
+
+                az network nsg rule create \
+                  --resource-group MC_rg-moath-qa_aks-moath-qa_westus2 \
+                  --nsg-name aks-agentpool-25353439-nsg \
+                  --name Allow-HTTPS-Inbound \
+                  --priority 1001 \
+                  --source-address-prefixes '*' \
+                  --destination-port-ranges 443 \
+                  --access Allow \
+                  --protocol Tcp \
+                  --direction Inbound 2>/dev/null || echo "NSG rule already exists"
+
                 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
                 helm repo add grafana https://grafana.github.io/helm-charts
                 helm repo update
@@ -295,7 +352,18 @@ stages:
                   --namespace monitoring \
                   --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
                   --set grafana.adminPassword=admin123 \
-                  --set grafana.service.type=LoadBalancer
+                  --set grafana.service.type=LoadBalancer \
+                  --set grafana.service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-internal"=false
+
+                # Deploy ServiceMonitors for backend pods
+                kubectl apply -f k8s/monitoring/servicemonitor.yaml -n moath-webapp-qa || true
+
+                # Deploy Grafana dashboards
+                kubectl apply -f k8s/monitoring/grafana-dashboard.yaml || true
+
+                # Fix Grafana LoadBalancer service configuration
+                kubectl annotate service prometheus-grafana -n monitoring service.beta.kubernetes.io/azure-load-balancer-internal=false --overwrite || true
+                kubectl annotate service prometheus-grafana -n monitoring service.beta.kubernetes.io/azure-allowed-ip-ranges="" --overwrite || true
 
                 # ========================================
                 # Install Loki
@@ -396,6 +464,29 @@ stages:
                 # ========================================
                 kubectl create ns monitoring --dry-run=client -o yaml | kubectl apply -f -
 
+                # Ensure NSG rules allow HTTP/HTTPS traffic (idempotent)
+                az network nsg rule create \
+                  --resource-group MC_rg-moath-prod_aks-moath-prod_westus2 \
+                  --nsg-name aks-agentpool-40887715-nsg \
+                  --name Allow-HTTP-Inbound \
+                  --priority 1000 \
+                  --source-address-prefixes '*' \
+                  --destination-port-ranges 80 \
+                  --access Allow \
+                  --protocol Tcp \
+                  --direction Inbound 2>/dev/null || echo "NSG rule already exists"
+
+                az network nsg rule create \
+                  --resource-group MC_rg-moath-prod_aks-moath-prod_westus2 \
+                  --nsg-name aks-agentpool-72219259-nsg \
+                  --name Allow-HTTPS-Inbound \
+                  --priority 1001 \
+                  --source-address-prefixes '*' \
+                  --destination-port-ranges 443 \
+                  --access Allow \
+                  --protocol Tcp \
+                  --direction Inbound 2>/dev/null || echo "NSG rule already exists"
+
                 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
                 helm repo add grafana https://grafana.github.io/helm-charts
                 helm repo update
@@ -404,7 +495,18 @@ stages:
                   --namespace monitoring \
                   --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
                   --set grafana.adminPassword=admin123 \
-                  --set grafana.service.type=LoadBalancer
+                  --set grafana.service.type=LoadBalancer \
+                  --set grafana.service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-internal"=false
+
+                # Deploy ServiceMonitors for backend pods
+                kubectl apply -f k8s/monitoring/servicemonitor.yaml -n moath-webapp-prod || true
+
+                # Deploy Grafana dashboards
+                kubectl apply -f k8s/monitoring/grafana-dashboard.yaml || true
+
+                # Fix Grafana LoadBalancer service configuration
+                kubectl annotate service prometheus-grafana -n monitoring service.beta.kubernetes.io/azure-load-balancer-internal=false --overwrite || true
+                kubectl annotate service prometheus-grafana -n monitoring service.beta.kubernetes.io/azure-allowed-ip-ranges="" --overwrite || true
 
                 # ========================================
                 # Install Loki
