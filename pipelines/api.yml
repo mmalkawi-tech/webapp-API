@@ -157,9 +157,43 @@ stages:
       displayName: "Install Trivy"
 
     - script: |
-        trivy image --severity CRITICAL --exit-code 1 backend-a-local
-        trivy image --severity CRITICAL --exit-code 1 backend-b-local
-      displayName: "Fail Build if Critical CVEs Found"
+        echo "=== Creating Trivy Reports Directory ==="
+        TRIVY_DIR="$(Build.ArtifactStagingDirectory)/trivy-reports"
+        mkdir -p "$TRIVY_DIR"
+
+        echo "=== Scanning backend-a with Trivy ==="
+        trivy image --format json --output "$TRIVY_DIR/backend-a-trivy.json" backend-a-local || true
+        trivy image --format table --output "$TRIVY_DIR/backend-a-trivy.txt" backend-a-local || true
+        trivy image --format sarif --output "$TRIVY_DIR/backend-a-trivy.sarif" backend-a-local || true
+
+        echo "=== Scanning backend-b with Trivy ==="
+        trivy image --format json --output "$TRIVY_DIR/backend-b-trivy.json" backend-b-local || true
+        trivy image --format table --output "$TRIVY_DIR/backend-b-trivy.txt" backend-b-local || true
+        trivy image --format sarif --output "$TRIVY_DIR/backend-b-trivy.sarif" backend-b-local || true
+
+        echo "=== Trivy Reports Generated ==="
+        ls -lah "$TRIVY_DIR"
+
+        echo "=== Checking for CRITICAL vulnerabilities ==="
+        # Fail build if CRITICAL CVEs found
+        trivy image --severity CRITICAL --exit-code 1 backend-a-local || {
+          echo "##vso[task.logissue type=error]CRITICAL vulnerabilities found in backend-a image!"
+          exit 1
+        }
+        trivy image --severity CRITICAL --exit-code 1 backend-b-local || {
+          echo "##vso[task.logissue type=error]CRITICAL vulnerabilities found in backend-b image!"
+          exit 1
+        }
+      displayName: "Trivy Container Scan and Report Generation"
+      continueOnError: false
+
+    - task: PublishBuildArtifacts@1
+      condition: always()
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/trivy-reports'
+        ArtifactName: 'trivy-scan-reports'
+        publishLocation: 'Container'
+      displayName: "Publish Trivy Scan Reports"
 
     - script: |
         docker tag backend-a-local $(ACR_LOGIN_SERVER)/backend-a-moath:latest
