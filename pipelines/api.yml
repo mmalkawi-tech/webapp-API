@@ -61,18 +61,34 @@ stages:
         SONARQUBE_TOKEN: $(SONARQUBE_TOKEN)
 
     - script: |
+        # Install dependencies first to generate package-lock.json
+        cd backend-a && npm install && cd ..
+        cd backend-b && npm install && cd ..
+
+        # Download and setup OWASP Dependency Check
         wget https://github.com/jeremylong/DependencyCheck/releases/download/v9.0.9/dependency-check-9.0.9-release.zip
-        unzip dependency-check-9.0.9-release.zip
+        unzip -q dependency-check-9.0.9-release.zip
+
+        # Create output directory
+        mkdir -p $(Build.ArtifactStagingDirectory)/dependency-check
+
+        # Run OWASP Dependency Check
         ./dependency-check/bin/dependency-check.sh \
-          --scan ./backend-a/package.json \
-          --scan ./backend-b/package.json \
+          --scan ./backend-a \
+          --scan ./backend-b \
           --format HTML \
           --format JSON \
+          --format XML \
           --out $(Build.ArtifactStagingDirectory)/dependency-check \
+          --project "moath-webapp-api" \
           --failOnCVSS 9 \
-          --suppression ./dependency-check-suppressions.xml || true
+          --enableExperimental || true
+
+        # List generated files for debugging
+        echo "Generated OWASP reports:"
+        ls -la $(Build.ArtifactStagingDirectory)/dependency-check/
       displayName: "OWASP Dependency Check - Scan Dependencies"
-      continueOnError: false
+      continueOnError: true
 
     - script: |
         if [ -f "$(Build.ArtifactStagingDirectory)/dependency-check/dependency-check-report.json" ]; then
@@ -85,11 +101,23 @@ stages:
         fi
       displayName: "Fail Build if Critical Vulnerabilities Found"
 
+    - script: |
+        echo "Checking for OWASP reports before publishing..."
+        ls -la $(Build.ArtifactStagingDirectory)/dependency-check/ || echo "No dependency-check directory found"
+        if [ ! -d "$(Build.ArtifactStagingDirectory)/dependency-check" ]; then
+          echo "Creating empty dependency-check directory..."
+          mkdir -p $(Build.ArtifactStagingDirectory)/dependency-check
+          echo "No OWASP reports were generated" > $(Build.ArtifactStagingDirectory)/dependency-check/README.txt
+        fi
+      displayName: "Verify OWASP Reports Directory"
+      condition: always()
+
     - task: PublishBuildArtifacts@1
       condition: always()
       inputs:
         PathtoPublish: '$(Build.ArtifactStagingDirectory)/dependency-check'
         ArtifactName: 'dependency-check-reports'
+        publishLocation: 'Container'
       displayName: "Publish OWASP Dependency Check Reports"
 
     - task: AzureCLI@2

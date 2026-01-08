@@ -2,9 +2,44 @@ const express = require("express");
 const multer = require("multer");
 const upload = multer();
 const { Pool } = require("pg");
+const promClient = require("prom-client");
 
 const BACKEND = "backend-b";
 const PORT = process.env.PORT || 8080;
+
+// Prometheus metrics setup
+const register = new promClient.Registry();
+
+// Enable default metrics (CPU, memory, etc.)
+promClient.collectDefaultMetrics({ register });
+
+// Custom metrics
+const httpRequestsTotal = new promClient.Counter({
+  name: "http_requests_total",
+  help: "Total number of HTTP requests",
+  labelNames: ["method", "path", "status"],
+  registers: [register]
+});
+
+const httpRequestDuration = new promClient.Histogram({
+  name: "http_request_duration_seconds",
+  help: "Duration of HTTP requests in seconds",
+  labelNames: ["method", "path", "status"],
+  registers: [register]
+});
+
+const dbConnectionsActive = new promClient.Gauge({
+  name: "db_connections_active",
+  help: "Number of active database connections",
+  registers: [register]
+});
+
+const dbQueryDuration = new promClient.Histogram({
+  name: "db_query_duration_seconds",
+  help: "Duration of database queries in seconds",
+  labelNames: ["query_type"],
+  registers: [register]
+});
 
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -17,7 +52,54 @@ const pool = new Pool({
   }
 });
 
+// Track database connection pool metrics
+pool.on("connect", () => {
+  dbConnectionsActive.set(pool.totalCount);
+});
+
+pool.on("remove", () => {
+  dbConnectionsActive.set(pool.totalCount);
+});
+
 const app = express();
+
+/**
+ * =========================
+ * Prometheus Metrics Endpoint
+ * =========================
+ */
+app.get("/metrics", async (req, res) => {
+  res.setHeader("Content-Type", register.contentType);
+  res.send(await register.metrics());
+});
+
+/**
+ * =========================
+ * Metrics Middleware
+ * =========================
+ */
+app.use((req, res, next) => {
+  const start = Date.now();
+
+  res.on("finish", () => {
+    const duration = (Date.now() - start) / 1000;
+    const path = req.path === "/" ? "root" : req.path;
+
+    httpRequestsTotal.inc({
+      method: req.method,
+      path: path,
+      status: res.statusCode
+    });
+
+    httpRequestDuration.observe({
+      method: req.method,
+      path: path,
+      status: res.statusCode
+    }, duration);
+  });
+
+  next();
+});
 
 /**
  * =========================
@@ -66,15 +148,21 @@ app.post("/", upload.single("image"), async (req, res) => {
   try {
     const image = req.file ? req.file.buffer : null;
 
+    // Track INSERT query duration
+    const insertStart = Date.now();
     await pool.query(
       `INSERT INTO requests (backend_name, meta, image)
        VALUES ($1, $2, $3)`,
       [BACKEND, { uploaded: !!image }, image]
     );
+    dbQueryDuration.observe({ query_type: "insert" }, (Date.now() - insertStart) / 1000);
 
+    // Track SELECT query duration
+    const selectStart = Date.now();
     const rows = await pool.query(
       "SELECT id, backend_name, ts, meta FROM requests ORDER BY ts DESC LIMIT 5"
     );
+    dbQueryDuration.observe({ query_type: "select" }, (Date.now() - selectStart) / 1000);
 
     res.json({
       backend: BACKEND,

@@ -8,76 +8,89 @@ metadata:
 data:
   nodejs-dashboard.json: |
     {
-      "dashboard": {
-        "title": "Node.js Application Metrics",
-        "tags": ["nodejs", "backend"],
-        "timezone": "browser",
-        "panels": [
-          {
-            "title": "HTTP Request Rate",
-            "type": "graph",
-            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
-            "targets": [
-              {
-                "expr": "rate(http_requests_total[5m])",
-                "legendFormat": "{{method}} {{path}}"
-              }
-            ]
-          },
-          {
-            "title": "HTTP Response Time (p95)",
-            "type": "graph",
-            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
-            "targets": [
-              {
-                "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
-                "legendFormat": "{{method}} {{path}}"
-              }
-            ]
-          },
-          {
-            "title": "CPU Usage",
-            "type": "graph",
-            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
-            "targets": [
-              {
-                "expr": "rate(process_cpu_seconds_total[5m])",
-                "legendFormat": "{{pod}}"
-              }
-            ]
-          },
-          {
-            "title": "Memory Usage",
-            "type": "graph",
-            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
-            "targets": [
-              {
-                "expr": "process_resident_memory_bytes",
-                "legendFormat": "{{pod}}"
-              }
-            ]
-          },
-          {
-            "title": "Pod Status",
-            "type": "stat",
-            "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
-            "targets": [
-              {
-                "expr": "count(kube_pod_status_phase{namespace=\"moath-webapp-dev\", phase=\"Running\"})"
-              }
-            ]
-          },
-          {
-            "title": "Database Connections",
-            "type": "graph",
-            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
-            "targets": [
-              {
-                "expr": "pg_stat_database_numbackends",
-                "legendFormat": "{{datname}}"
-              }
-            ]
-          }
-        ]
-      }
+      "title": "Node.js Application Metrics",
+      "tags": ["nodejs", "backend"],
+      "timezone": "browser",
+      "schemaVersion": 16,
+      "version": 0,
+      "refresh": "30s",
+      "panels": [
+        {
+          "title": "HTTP Request Rate",
+          "type": "graph",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "rate(http_requests_total{namespace=\"moath-webapp-dev\"}[5m])",
+              "legendFormat": "{{method}} {{path}}",
+              "refId": "A"
+            }
+          ],
+          "datasource": "Prometheus"
+        },
+        {
+          "title": "HTTP Response Time (p95)",
+          "type": "graph",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{namespace=\"moath-webapp-dev\"}[5m]))",
+              "legendFormat": "{{method}} {{path}}",
+              "refId": "A"
+            }
+          ],
+          "datasource": "Prometheus"
+        },
+        {
+          "title": "CPU Usage",
+          "type": "graph",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "targets": [
+            {
+              "expr": "rate(process_cpu_seconds_total{namespace=\"moath-webapp-dev\"}[5m])",
+              "legendFormat": "{{pod}}",
+              "refId": "A"
+            }
+          ],
+          "datasource": "Prometheus"
+        },
+        {
+          "title": "Memory Usage",
+          "type": "graph",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "targets": [
+            {
+              "expr": "process_resident_memory_bytes{namespace=\"moath-webapp-dev\"}",
+              "legendFormat": "{{pod}}",
+              "refId": "A"
+            }
+          ],
+          "datasource": "Prometheus"
+        },
+        {
+          "title": "Pod Status",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
+          "targets": [
+            {
+              "expr": "count(kube_pod_status_phase{namespace=\"moath-webapp-dev\", phase=\"Running\"})",
+              "refId": "A"
+            }
+          ],
+          "datasource": "Prometheus"
+        },
+        {
+          "title": "Database Connections",
+          "type": "graph",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+          "targets": [
+            {
+              "expr": "pg_stat_database_numbackends",
+              "legendFormat": "{{datname}}",
+              "refId": "A"
+            }
+          ],
+          "datasource": "Prometheus"
+        }
+      ]
     }

@@ -2,10 +2,13 @@ apiVersion: v1
 kind: Service
 metadata:
   name: backend-b-moath
+  labels:
+    app: backend-b-moath
 spec:
   type: ClusterIP
   selector:
     app: backend-b-moath
   ports:
-  - port: 80
+  - name: http
+    port: 80
     targetPort: 8080
