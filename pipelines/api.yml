@@ -180,7 +180,7 @@ stages:
           echo "##vso[task.logissue type=error]CRITICAL vulnerabilities found in backend-a image!"
           exit 1
         }
-        trivy image --severity CRITICAL --exit-code 1 backend-b-local || {
+        trivy image --severity CRITICAL,High --exit-code 1 backend-b-local || {
           echo "##vso[task.logissue type=error]CRITICAL vulnerabilities found in backend-b image!"
           exit 1
         }
